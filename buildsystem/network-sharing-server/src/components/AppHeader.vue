@@ -1,7 +1,7 @@
 <template>
   <nav class="navbar navbar-light navbar-expand-md shadow-sm sticky-top align-items-center container-fluid main-navbar">
     <RouterLink class="flex1" :to="{ name: 'VideoList' }">
-      <img id="logo" v-bind:src="$getAppAsset('ic_icon', 48)" width="48">
+      <img id="logo" v-bind:src="$getAppAsset('ic_icon', 48, true)" width="48">
     </RouterLink>
     <div class="d-flex justify-content-center">
       <RouterLink :to="{ name: 'VideoList' }">
@@ -31,13 +31,13 @@
     </div>
     <div class="d-flex flex1 justify-content-end">
       <ImageButton type="cloud_off" class="blink" v-show="!appStore.socketOpened" v-on:click.stop="disconnectedClicked"
-        data-bs-toggle="tooltip" data-bs-placement="bottom" :title="$t('DISCONNECTED')" />
+        v-tooltip data-bs-placement="bottom" :title="$t('DISCONNECTED')" />
       <RouterLink :to="{ name: 'SearchList' }">
-        <ImageButton type="search" data-bs-toggle="tooltip" data-bs-placement="bottom" :title="$t('SEARCH')" />
+        <ImageButton type="search" v-tooltip data-bs-placement="bottom" :title="$t('SEARCH')" />
       </RouterLink>
       <div class="dropdown dropstart">
-        <ImageButton type="more_vert" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false" />
-        <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
+        <ImageButton type="more_vert" data-bs-toggle="dropdown" aria-expanded="false" />
+        <ul class="dropdown-menu">
           <li>
             <a v-on:click="this.$emit('send-files')" v-t="'SEND_FILES'" class="dropdown-item clickable"></a>
           </li>
@@ -45,17 +45,36 @@
             <RouterLink class="dropdown-item" :to="{ name: 'Logs' }" v-t="'LOG_FILE'">
             </RouterLink>
           </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a v-on:click="changeTheme" class="dropdown-item clickable">
+              <img  class="image-button" :src="(`./icons/checked.svg`)"  v-show="(this.appStore.darkTheme)"/>
+            <span  v-t="'DARK_THEME'"></span>
+            </a>
+          </li>
         </ul>
       </div>
     </div>
-    <div class="navtabs-container border-top" v-show="this.$route.meta.showDisplayBar">
+    <div class="navtabs-container border-bottom" v-show="this.$route.meta.showDisplayBar">
       <div class="flex1 d-flex align-items-center">
-        <ImageButton type="grid_view" v-on:click.stop="this.appStore.toggleDisplayType(this.$route.name)"
-          v-show="this.appStore.displayType[this.$route.name]" data-bs-toggle="tooltip" data-bs-placement="bottom"
-          :title="$t('DISPLAY_GRID')" />
-        <ImageButton type="view_list" v-show="!this.appStore.displayType[this.$route.name]" data-bs-toggle="tooltip"
-          data-bs-placement="bottom" :title="$t('DISPLAY_LIST')" aria-expanded="false"
-          v-on:click.stop="this.appStore.toggleDisplayType(this.$route.name)" />
+        <ImageButton :type="(this.appStore.displayType[this.$route.name]) ? 'grid_view' : 'view_list'" v-on:click.stop="this.appStore.toggleDisplayType(this.$route.name)"
+        v-tooltip data-bs-placement="bottom"
+          :title="$t((this.appStore.displayType[this.$route.name]) ? 'DISPLAY_GRID': 'DISPLAY_LIST')" />
+
+        <div class="dropdown" v-show="this.$route.meta.showGrouping">
+          <button class="btn btn-lg image-button hidden-arrow" type="button" data-bs-toggle="dropdown"
+            aria-expanded="false">
+            <img class="image-button-image" v-bind:src="$getAppAsset('ic_group', 24)">
+          </button>
+          <ul class="dropdown-menu dropdown-menu-start">
+            <li><a class="dropdown-item cursor-pointer" v-bind:class="isActive(0) ? 'active' : ''"
+                v-t="'VIDEO_GROUP_NONE'" v-on:click="this.appStore.changeGrouping(0)"></a></li>
+            <li><a class="dropdown-item cursor-pointer" v-bind:class="isActive(1) ? 'active' : ''"
+                v-t="'VIDEO_GROUP_BY_FOLDER'" v-on:click="this.appStore.changeGrouping(1)"></a></li>
+            <li><a class="dropdown-item cursor-pointer" v-bind:class="isActive(2) ? 'active' : ''"
+                v-t="'VIDEO_GROUP_BY_NAME'" v-on:click="this.appStore.changeGrouping(2)"></a></li>
+          </ul>
+        </div>
       </div>
       <ul class="nav justify-content-center navtabs">
         <li class="nav-item">
@@ -96,10 +115,18 @@
         </nav>
 
       </div>
+      <div class="d-flex align-items-center" v-else-if="this.getTitle()">
+        <p class="text-primary breadcrumb">{{ this.getTitle() }}</p>
+      </div>
 
       <div class="flex1 d-flex justify-content-end align-items-center">
+        <button class="btn btn-lg image-button" v-show="this.$route.meta.showFAB"
+        v-on:click.stop="$playAll(this.$route)" v-tooltip data-bs-placement="bottom"
+          :title="$t('PLAY_ALL')">
+          <img class="image-button-image" v-bind:src="$getAppAsset('ic_ctx_play_all', 24)">
+        </button>
         <button class="btn btn-lg image-button" v-show="this.$route.meta.showResume"
-          v-on:click.stop="$resumePlayback(this.$route.meta.isAudio)" data-bs-toggle="tooltip" data-bs-placement="bottom"
+          v-on:click.stop="$resumePlayback(this.$route.meta.isAudio)" v-tooltip data-bs-placement="bottom"
           :title="$t('RESUME_PLAYBACK')">
           <img class="image-button-image" v-bind:src="$getAppAsset('ic_resume_playback', 24)">
         </button>
@@ -112,7 +139,6 @@
 import { useAppStore } from '../stores/AppStore'
 import { useBrowserStore } from '../stores/BrowserStore'
 import { mapStores } from 'pinia'
-import { Tooltip } from 'bootstrap';
 import ImageButton from './ImageButton.vue'
 
 export default {
@@ -132,20 +158,21 @@ export default {
     },
     hasBreadcrumb() {
       return this.browserStore.breadcrumb.length != 0
+    },
+    getTitle() {
+      return this.appStore.title
+    },
+    isActive(mode) {
+      return this.appStore.videoGrouping == mode
+    },
+    changeTheme () {
+      this.appStore.darkTheme = !this.appStore.darkTheme
     }
   },
   computed: {
     ...mapStores(useAppStore),
     ...mapStores(useBrowserStore),
   },
-  mounted() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new Tooltip(tooltipTriggerEl, {
-        trigger: 'hover'
-      })
-    })
-  }
 }
 </script>
 
@@ -153,7 +180,6 @@ export default {
 @import '../scss/colors.scss';
 
 .navbar.navbar-light {
-  background-color: $light-grey;
   border-radius: 0;
   padding: 0;
 }
@@ -172,6 +198,11 @@ export default {
   filter: invert(61%) sepia(64%) saturate(4340%) hue-rotate(358deg) brightness(99%) contrast(109%);
 }
 
+.nav-button img {
+  color: $primary-color;
+  filter: var(--img-tint);
+}
+
 .nav-button p {
   font-size: 0.7em;
   font-weight: 500;
@@ -183,7 +214,6 @@ export default {
 
 .navtabs-container {
   flex-basis: 100%;
-  background-color: $lighter-grey;
   display: flex;
 }
 
@@ -192,7 +222,7 @@ export default {
 }
 
 .navtabs .nav-link {
-  color: #212529;
+   color: var(--bs-btn-color);
 }
 
 .navtabs .nav-link.active {
@@ -208,4 +238,7 @@ export default {
     opacity: 0;
   }
 }
-</style>
+
+.cursor-pointer {
+  cursor: pointer;
+}</style>
