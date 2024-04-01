@@ -51,9 +51,12 @@ import org.videolan.vlc.databinding.CardBrowserItemBinding
 import org.videolan.vlc.gui.DiffUtilAdapter
 import org.videolan.vlc.gui.helpers.*
 import org.videolan.vlc.gui.view.FastScroller
+import org.videolan.vlc.gui.view.MiniVisualizer
 import org.videolan.vlc.util.LifecycleAwareScheduler
 import org.videolan.vlc.util.getDescriptionSpan
+import org.videolan.vlc.viewmodels.PlaylistModel
 
+const val UPDATE_PROGRESS = "update_progress"
 open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibraryItem>, var sort:Int = Medialibrary.SORT_FILENAME, var asc:Boolean = true) : DiffUtilAdapter<MediaLibraryItem, BaseBrowserAdapter.ViewHolder<ViewDataBinding>>(), MultiSelectAdapter<MediaLibraryItem>, FastScroller.SeparatedAdapter {
 
     protected val TAG = "VLC/BaseBrowserAdapter"
@@ -83,6 +86,19 @@ open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibrar
     private var specialIcons = false
 
     val diffCallback = BrowserDiffCallback()
+    private var currentPlayingVisu: MiniVisualizer? = null
+    private var model: PlaylistModel? = null
+
+    var currentMedia: MediaWrapper? = null
+        set(media) {
+            if (media == currentMedia) return
+            val former = currentMedia
+            field = media
+            if (former != null) notifyItemChanged(dataset.indexOf(former))
+            if (media != null) {
+                notifyItemChanged(dataset.indexOf(media))
+            }
+        }
 
     private var scheduler: LifecycleAwareScheduler? = null
 
@@ -125,7 +141,17 @@ open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibrar
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         scheduler?.cancelAction(MARQUEE_ACTION)
+        currentMedia = null
+        currentPlayingVisu = null
         super.onDetachedFromRecyclerView(recyclerView)
+    }
+
+    fun setCurrentlyPlaying(playing: Boolean) {
+        if (playing) currentPlayingVisu?.start() else currentPlayingVisu?.stop()
+    }
+
+    fun setModel(model: PlaylistModel) {
+        this.model = model
     }
 
     override fun onBindViewHolder(holder: ViewHolder<ViewDataBinding>, position: Int) {
@@ -142,7 +168,13 @@ open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibrar
     override fun onBindViewHolder(holder: ViewHolder<ViewDataBinding>, position: Int, payloads: MutableList<Any>) {
         if (payloads.isEmpty())
             onBindViewHolder(holder, position)
-        else if (payloads[0] is CharSequence) {
+        else if (payloads[0] == UPDATE_PROGRESS) {
+            val media = getItem(position) as MediaWrapper
+            val max = (media.length / 1000).toInt()
+            val progress = (media.displayTime / 1000).toInt()
+            (holder as MediaViewHolder).bindingContainer.setProgress(holder.bindingContainer.container.context, progress, max)
+            if (media.type != MediaWrapper.TYPE_AUDIO) holder.bindingContainer.setIsPlayed(holder.bindingContainer.container.context, media.playCount > 0)
+        }  else if (payloads[0] is CharSequence) {
             (holder as MediaViewHolder).bindingContainer.text.visibility = View.VISIBLE
             holder.bindingContainer.text.text = (payloads[0] as CharSequence).getDescriptionSpan(holder.bindingContainer.text.context)
             val item = getItem(position) as MediaWrapper
@@ -157,6 +189,10 @@ open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibrar
     private fun onBindMediaViewHolder(vh: MediaViewHolder, position: Int) {
         val media = getItem(position) as MediaWrapper
         val isFavorite = media.hasStateFlags(MediaLibraryItem.FLAG_FAVORITE)
+        val max = (media.length / 1000).toInt()
+        val progress = (media.displayTime / 1000).toInt()
+        vh.bindingContainer.setProgress(vh.bindingContainer.container.context, progress, max)
+        if (media.type != MediaWrapper.TYPE_AUDIO) vh.bindingContainer.setIsPlayed(vh.bindingContainer.container.context, media.playCount > 0)
         vh.bindingContainer.setItem(media)
         vh.bindingContainer.setIsFavorite(isFavorite)
         val scheme = media.uri?.scheme ?: ""
@@ -169,6 +205,14 @@ open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibrar
         vh.bindingContainer.setCover(getIcon(media, specialIcons))
         vh.selectView(multiSelectHelper.isSelected(position))
         itemFocusChanged(position, false, vh.bindingContainer)
+        if (currentMedia == media) {
+            if (model?.playing != false) vh.bindingContainer.startVisu() else vh.bindingContainer.stopVisu()
+            vh.bindingContainer.setVisuVisibility(View.VISIBLE)
+            currentPlayingVisu = vh.bindingContainer.getVisu()
+        } else {
+            vh.bindingContainer.stopVisu()
+            vh.bindingContainer.setVisuVisibility(View.INVISIBLE)
+        }
     }
 
     override fun onViewRecycled(holder: ViewHolder<ViewDataBinding>) {
@@ -343,11 +387,7 @@ open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibrar
 
     override fun prepareList(list: List<MediaLibraryItem>): List<MediaLibraryItem> {
         val internalList = ArrayList(list)
-        mediaCount = 0
-        for (item in internalList) {
-            if (item.itemType == TYPE_MEDIA && ((item as MediaWrapper).type == MediaWrapper.TYPE_AUDIO || item.type == MediaWrapper.TYPE_VIDEO))
-                ++mediaCount
-        }
+        mediaCount = internalList.filterNotNull().map {item -> item.itemType == TYPE_MEDIA && ((item as MediaWrapper).type == MediaWrapper.TYPE_AUDIO || item.type == MediaWrapper.TYPE_VIDEO) }.size
         return internalList
     }
 
@@ -366,14 +406,27 @@ open class BaseBrowserAdapter(val browserContainer: BrowserContainer<MediaLibrar
         var newAsc = true
 
         override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int):Boolean {
-            val result =  if (newSort == oldSort && newAsc == oldAsc) true else try {
+            val result = try {
                 val oldItem = oldList[oldItemPosition] as MediaWrapper
                 val newItem = newList[newItemPosition] as MediaWrapper
-                (oldItem.fileName == newItem.title && newItem.fileName == oldItem.title)
+                (oldItem.displayTime == newItem.displayTime) &&
+                        (oldItem.playCount == newItem.playCount) &&
+                        (oldItem.fileName == newItem.fileName) &&
+                        (newItem.title == oldItem.title)
             } catch (ignored: Exception) {
                 true
             }
             return result
+        }
+
+        override fun getChangePayload(oldItemPosition: Int, newItemPosition: Int): Any? {
+            try {
+                val oldItem = oldList[oldItemPosition] as MediaWrapper
+                val newItem = newList[newItemPosition] as MediaWrapper
+                if (oldItem.displayTime != newItem.displayTime || oldItem.playCount != newItem.playCount) return UPDATE_PROGRESS
+            } catch (ignored: Exception) {
+            }
+            return super.getChangePayload(oldItemPosition, newItemPosition)
         }
 
         override fun areItemsTheSame(oldItemPosition : Int, newItemPosition : Int) = oldList[oldItemPosition] == newList[newItemPosition]

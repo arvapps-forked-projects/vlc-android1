@@ -12,11 +12,12 @@ import LoginPage from './pages/LoginPage'
 import SslPage from './pages/SslPage'
 import ArtistDetails from './pages/ArtistDetails'
 import AlbumDetails from './pages/AlbumDetails'
+import PlaylistDetails from './pages/PlaylistDetails'
 
 const routes = [
   { path: '/', redirect: '/videos', name: 'Home' },
   {
-    path: '/videos',
+    path: '/videos', name: 'Video',
     children: [
       { path: '', component: VideoList, name: 'VideoList', meta: { showDisplayBar: true, showResume: true, showGrouping: true } },
        { path: 'group/:groupId', component: VideoList, name: 'VideoGroupList', meta: { showDisplayBar: true, showFAB: true, playAllType: "video-group" } },
@@ -35,13 +36,19 @@ const routes = [
     ]
   },
   {
-    path: '/browse', meta: { showDisplayBar: true },
+    path: '/browse', name: 'Browse', meta: { showDisplayBar: true },
     children: [
       { path: '', component: BrowseList, name: 'BrowseList', meta: { showDisplayBar: true } },
       { path: ':browseId', component: BrowseChild, name: 'BrowseChild', meta: { showDisplayBar: true, showFAB: true, playAllType: "browser" } },
     ]
   },
-  { path: '/playlists', component: PlaylistList, name: 'PlaylistList', meta: { showDisplayBar: true } },
+  { 
+    path: '/playlists', redirect: '/playlists/all', name: 'Playlist',
+    children : [
+      {path: 'all', component: PlaylistList, name: 'PlaylistList', meta: { showDisplayBar: true }},
+      { path: 'playlist/:playlistId', component: PlaylistDetails, name: 'PlaylistDetails', meta: { showDisplayBar: true, isAudio: false, showResume: false, showGrouping: false, showFAB: true, playAllType: "playlist" } }
+    ]
+},
   { path: '/search', component: SearchList, name: 'SearchList', meta: { showDisplayBar: false } },
 
   { path: '/logs', component: PageDownloads, name: 'Logs' },

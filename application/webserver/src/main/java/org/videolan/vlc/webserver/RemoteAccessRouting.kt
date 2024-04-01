@@ -511,9 +511,28 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
 
             val list = ArrayList<RemoteAccessServer.PlayQueueItem>()
             album.tracks.forEach { track ->
-                list.add(track.toPlayQueueItem())
+                list.add(track.toPlayQueueItem(album.albumArtist))
             }
             val result= RemoteAccessServer.AlbumResult(list, album.title)
+            val gson = Gson()
+            call.respondText(gson.toJson(result))
+        }
+        // Get an playlist details
+        get("/playlist") {
+            verifyLogin(settings)
+            if (!settings.serveAudios(appContext)) {
+                call.respond(HttpStatusCode.Forbidden)
+                return@get
+            }
+            val id = call.request.queryParameters["id"]?.toLong() ?: 0L
+
+            val playlist = appContext.getFromMl { getPlaylist(id, false, false) }
+
+            val list = ArrayList<RemoteAccessServer.PlayQueueItem>()
+            playlist.tracks.forEach { track ->
+                list.add(track.toPlayQueueItem())
+            }
+            val result= RemoteAccessServer.PlaylistResult(list, playlist.title)
             val gson = Gson()
             call.respondText(gson.toJson(result))
         }
@@ -1216,8 +1235,7 @@ fun Genre.toPlayQueueItem(appContext: Context) = RemoteAccessServer.PlayQueueIte
 fun Playlist.toPlayQueueItem(appContext: Context) = RemoteAccessServer.PlayQueueItem(id, title, appContext.resources.getQuantityString(R.plurals.track_quantity, tracksCount, tracksCount), 0, artworkMrl
         ?: "", false, "")
 
-fun MediaWrapper.toPlayQueueItem() = RemoteAccessServer.PlayQueueItem(id, title, artist
-        ?: "", length, artworkMrl
+fun MediaWrapper.toPlayQueueItem(defaultArtist: String = "") = RemoteAccessServer.PlayQueueItem(id, title, artist?.ifEmpty { defaultArtist } ?: defaultArtist, length, artworkMrl
         ?: "", false, generateResolutionClass(width, height) ?: "", progress = time, played = seen > 0)
 
 fun Folder.toPlayQueueItem(context: Context) = RemoteAccessServer.PlayQueueItem(id, title, context.resources.getQuantityString(org.videolan.vlc.R.plurals.videos_quantity, mediaCount(Folder.TYPE_FOLDER_VIDEO), mediaCount(Folder.TYPE_FOLDER_VIDEO))

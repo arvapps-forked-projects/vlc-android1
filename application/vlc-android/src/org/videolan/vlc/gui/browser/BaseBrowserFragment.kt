@@ -38,7 +38,11 @@ import androidx.core.net.toUri
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -51,6 +55,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -105,6 +111,8 @@ import org.videolan.vlc.util.Permissions
 import org.videolan.vlc.util.SchedulerCallback
 import org.videolan.vlc.util.isSchemeSupported
 import org.videolan.vlc.util.isTalkbackIsEnabled
+import org.videolan.vlc.util.launchWhenStarted
+import org.videolan.vlc.viewmodels.PlaylistModel
 import org.videolan.vlc.viewmodels.browser.BrowserModel
 import java.io.File
 import java.util.LinkedList
@@ -154,6 +162,17 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
         }
         isRootDirectory = defineIsRoot()
         browserFavRepository = BrowserFavRepository.getInstance(requireContext())
+        lifecycleScope.launch(Dispatchers.Main) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                needRefresh.observe(this@BaseBrowserFragment) {
+
+                    if (it) {
+                        viewModel.refreshMW()
+                        needRefresh.postValue(false)
+                    }
+                }
+            }
+        }
     }
 
     override fun onPrepareOptionsMenu(menu: Menu) {
@@ -203,6 +222,16 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
             binding.browserFastScroller.attachToCoordinator(it, view.rootView.findViewById<View>(R.id.coordinator) as CoordinatorLayout, view.rootView.findViewById<View>(R.id.fab) as FloatingActionButton)
             binding.browserFastScroller.setRecyclerView(binding.networkList, viewModel.provider)
         }
+        PlaylistManager.currentPlayedMedia.observe(this) {
+            adapter.currentMedia = it
+        }
+
+        val playlistModel = PlaylistModel.get(this)
+        adapter.setModel(playlistModel)
+        playlistModel.dataset.asFlow().conflate().onEach {
+            adapter.setCurrentlyPlaying(playlistModel.playing)
+            delay(50L)
+        }.launchWhenStarted(lifecycleScope)
     }
 
     override fun sortBy(sort: Int) {
@@ -274,6 +303,7 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
         startedScope.cancel()
         PlaybackService.serviceFlow.value?.removeCallback(this)
         viewModel.stop()
+        needRefresh.postValue(false)
     }
 
     override fun onDestroy() {
@@ -741,7 +771,26 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
     override fun onMediaEvent(event: IMedia.Event) {}
 
     override fun onMediaPlayerEvent(event: MediaPlayer.Event) {
+        if (event.type != MediaPlayer.Event.EndReached && event.type != MediaPlayer.Event.PositionChanged ) return
+        //refresh current item
+        PlaybackService.serviceFlow.value?.currentMediaWrapper?.let {
+            if (event.type == MediaPlayer.Event.PositionChanged) {
+                viewModel.refreshMedia(it, PlaybackService.serviceFlow.value?.getTime() ?: 0L)
+            }
+            if (event.type == MediaPlayer.Event.EndReached) {
+               lifecycleScope.launch {
+                   viewModel.updateMediaPlayed(it)
+               }
+            }
+            val index = viewModel.dataset.getList().indexOf(it)
+
+            adapter.notifyItemChanged(index, UPDATE_PROGRESS)
+        }
         needToRefreshMeta = true
+    }
+
+    companion object {
+        val needRefresh = MutableLiveData(false)
     }
 
 }

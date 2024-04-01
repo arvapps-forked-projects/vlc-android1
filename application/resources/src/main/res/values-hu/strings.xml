@@ -23,29 +23,8 @@
     <string name="searchable_hint">Keresés…</string>
     <string name="history">Előzmények</string>
 
-    <string name="sortby_name_asc">Név A → Z</string>
-    <string name="sortby_name_desc">Név Z → A</string>
-    <string name="sortby_artist_name_asc">Előadó neve A → Z</string>
-    <string name="sortby_artist_name_desc">Előadó neve Z → A</string>
-    <string name="sortby_album_name_asc">Album címe A → Z</string>
-    <string name="sortby_album_name_desc">Album címe Z → A</string>
-    <string name="sortby_filename_asc">Fájlnév A → Z</string>
-    <string name="sortby_filename_desc">Fájlnév Z → A</string>
     <string name="sortby_length_asc">Legrövidebb elöl</string>
     <string name="sortby_length_desc">Leghosszabb elöl</string>
-    <string name="sortby_date_asc">Legrégebbi dátumú elöl</string>
-    <string name="sortby_date_desc">Legújabb dátumú elöl</string>
-    <string name="sortby_last_modified_date_asc">Legrégebben hozzáadott elöl</string>
-    <string name="sortby_last_modified_date_desc">Legutoljára hozzáadott elöl</string>
-    <string name="sortby_number_asc">Több videó a csoportban elöl</string>
-    <string name="sortby_number_desc">Kevesebb videó a csoportban elöl</string>
-    <string name="sortby_date_insertion_asc">Legrégebben beszúrt elöl</string>
-    <string name="sortby_date_insertion_desc">Legutoljára beszúrt elöl</string>
-    <string name="sortby_date_last_modified_asc">Legrégebben módosított elöl</string>
-    <string name="sortby_date_last_modified_desc">Legutoljára módosított elöl</string>
-    <string name="sortby_date_release_asc">Legrégebbi kiadási dátumú elöl</string>
-    <string name="sortby_date_release_desc">Legújabb kiadási dátumú elöl</string>
-
     <plurals name="search_found_results_quantity">
         <item quantity="one">%d találat</item>
         <item quantity="other">%d találat</item>
@@ -150,6 +129,7 @@
     <string name="nosubfolder">Nincs almappa</string>
     <string name="directorynotfound">A(z) „%1$s” könyvtárútvonal nem található.</string>
     <string name="nohistory">Még nincsenek lejátszási előzmények.</string>
+    <string name="cant_ban_root">Gyökérkönyvtárat nem tilthat ki</string>
 
     <string name="cover_art">Borító</string>
     <string name="shuffle_all_title">Az összes véletlen sorrendben</string>
@@ -465,7 +445,6 @@
     <string name="remote_access_info">A távoli elérési információi</string>
     <string name="remote_access_content">Tartalom</string>
     <string name="remote_access_medialibrary_content">Médiatár tartalma</string>
-    <string name="remote_access_medialibrary_content_summary">Engedélyezve: %s\nLetiltva: %s</string>
     <string name="remote_access_file_browser_content">Fájlböngésző</string>
     <string name="remote_access_network_browser_content">Hálózatböngésző</string>
     <string name="remote_access_playback_control">Lejátszás vezérlése</string>
@@ -1116,8 +1095,6 @@
 
 
 
-    <!--    accessibility-->
-    <string name="talkback_media_content_description">%s - cím: %s - időtartam: %s</string>
     <string name="talkback_genre">Műfaj: %s</string>
     <string name="talkback_history_item">Előzményelem</string>
     <string name="talkback_playlist">Lejátszási lista: %s</string>
@@ -1144,7 +1121,6 @@
     <string name="talkback_video_tracks">Videósávok</string>
     <string name="talkback_audio_tracks">Zeneszámok</string>
     <string name="talkback_subtitle_tracks">Feliratsávok</string>
-    <string name="talkback_subtitle_dowload_item">Nyelv: %s. %s. Név: %s</string>
     <string name="selected">Kiválasztva</string>
     <string name="talkback_increase_delay">Késleltetés növelése</string>
     <string name="talkback_decrease_delay">Késleltetés csökkentése</string>
@@ -1156,8 +1132,6 @@
     <string name="talkback_audio_player_collapsed">Zenelejátszó összecsukva</string>
     <string name="talkback_audio_player_closed">Zenelejátszó bezárva</string>
     <string name="talkback_audio_player">Zenelejátszó. Most játszott: %s</string>
-    <string name="talkback_out_of">%s / %s</string>
-    <string name="talkback_track_index">Szám: %s / %s</string>
     <string name="downloaded">Letöltve</string>
     <string name="not_downloaded">Nincs letöltve</string>
     <string name="downloading">Letöltés</string>
