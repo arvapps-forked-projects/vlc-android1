@@ -191,8 +191,6 @@ class MLStorageBrowserFragment : BaseFragment(), IStorageFragmentDelegate by Sto
         val onboarding = arguments?.getBoolean(FROM_ONBOARDING, false) == true
         menu.findItem(R.id.ml_menu_custom_dir)?.isVisible = !onboarding
         menu.findItem(R.id.ml_menu_refresh)?.isVisible = false
-        menu.findItem(R.id.browser_show_all_files)?.isVisible = false
-        menu.findItem(R.id.browser_show_hidden_files)?.isVisible = false
         menu.findItem(R.id.ml_menu_add_playlist)?.isVisible = false
     }
 
@@ -237,7 +235,7 @@ class MLStorageBrowserFragment : BaseFragment(), IStorageFragmentDelegate by Sto
         override val isRootDirectory = true
         override val isNetwork = isNetwork
         override val isFile = !isNetwork
-        override val inCards = false
+        override var inCards = false
 
         override fun onClick(v: View, position: Int, item: MediaLibraryItem) {
             val mw = (item as? MediaWrapper)?.let { MLServiceLocator.getAbstractMediaWrapper(it.uri) } ?:(item as? Storage)?.let { MLServiceLocator.getAbstractMediaWrapper(it.uri) }
