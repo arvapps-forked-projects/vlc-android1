@@ -702,7 +702,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
             val list = ArrayList<RemoteAccessServer.PlayQueueItem>()
             RemoteAccessServer.getInstance(appContext).networkSharesLiveData.getList().forEachIndexed { index, mediaLibraryItem ->
                 list.add(RemoteAccessServer.PlayQueueItem(3000L + index, mediaLibraryItem.title, " ", 0, mediaLibraryItem.artworkMrl
-                        ?: "", false, "", (mediaLibraryItem as MediaWrapper).uri.toString(), true))
+                        ?: "", false, "", (mediaLibraryItem as MediaWrapper).uri.toString(), true, favorite = mediaLibraryItem.isFavorite))
             }
             val gson = Gson()
             call.respondText(gson.toJson(list))
@@ -715,7 +715,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
             val list = ArrayList<RemoteAccessServer.PlayQueueItem>()
             stream.forEachIndexed { index, mediaLibraryItem ->
                 list.add(RemoteAccessServer.PlayQueueItem(3000L + index, mediaLibraryItem.title, " ", 0, mediaLibraryItem.artworkMrl
-                        ?: "", false, "", (mediaLibraryItem as MediaWrapper).uri.toString(), true))
+                        ?: "", false, "", (mediaLibraryItem as MediaWrapper).uri.toString(), true, favorite = mediaLibraryItem.isFavorite))
             }
             val gson = Gson()
             call.respondText(gson.toJson(list))
@@ -1002,6 +1002,62 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
             }
             call.respond(HttpStatusCode.NotFound)
         }
+        //Change the favorite state of a media
+        get("/favorite") {
+            val type = call.request.queryParameters["type"] ?: "media"
+            val favorite = call.request.queryParameters["favorite"] ?: "true" == "true"
+            call.request.queryParameters["id"]?.let { id ->
+                when (type) {
+                    "album" -> {
+                        val album = appContext.getFromMl { getAlbum(id.toLong()) }
+                        album.setFavorite(favorite)
+                        call.respondText("")
+                        return@get
+                    }
+                    "artist" -> {
+                        val artist = appContext.getFromMl { getArtist(id.toLong()) }
+                        artist.setFavorite(favorite)
+                        call.respondText("")
+                        return@get
+                    }
+                    "genre" -> {
+                        val genre = appContext.getFromMl { getGenre(id.toLong()) }
+                        genre.setFavorite(favorite)
+                        call.respondText("")
+                        return@get
+                    }
+                    "playlist" -> {
+                        val playlist = appContext.getFromMl { getPlaylist(id.toLong(), false, false) }
+                        playlist.setFavorite(favorite)
+                        call.respondText("")
+                        return@get
+                    }
+                    "video-group" -> {
+                        val videoGroup = appContext.getFromMl { getVideoGroup(id.toLong()) }
+                        videoGroup.setFavorite(favorite)
+                        call.respondText("")
+                        return@get
+                    }
+                    "video-folder" -> {
+                        val videoFolder = appContext.getFromMl { getFolder(Folder.TYPE_FOLDER_VIDEO, id.toLong()) }
+                        videoFolder.setFavorite(favorite)
+                        call.respondText("")
+                        return@get
+                    }
+                    else -> {
+                        //simple media. It's a direct download
+                        appContext.getFromMl { getMedia(id.toLong()) }?.let { media ->
+                            media.setFavorite(favorite)
+                            call.respondText("")
+                            return@get
+
+                        }
+                        call.respond(HttpStatusCode.NotFound)
+                    }
+                }
+            }
+            call.respond(HttpStatusCode.NotFound)
+        }
         // Get a media artwork
         get("/artwork") {
             var type = call.request.queryParameters["type"]
@@ -1263,7 +1319,7 @@ private suspend fun getProviderContent(context:Context, provider: BrowserProvide
                 && mediaLibraryItem is MediaWrapper) mediaLibraryItem.fileName else mediaLibraryItem.title
         val isFolder = if (mediaLibraryItem is MediaWrapper) mediaLibraryItem.type == MediaWrapper.TYPE_DIR else true
         list.add(RemoteAccessServer.PlayQueueItem(idPrefix + index, title, description, 0, mediaLibraryItem.artworkMrl
-                ?: "", false, "", path, isFolder))
+                ?: "", false, "", path, isFolder, favorite = mediaLibraryItem.isFavorite))
     }
     return list
 }
@@ -1272,23 +1328,23 @@ private suspend fun getProviderContent(context:Context, provider: BrowserProvide
 
 fun Album.toPlayQueueItem() = RemoteAccessServer.PlayQueueItem(id, title, albumArtist
         ?: "", duration, artworkMrl
-        ?: "", false, "")
+        ?: "", false, "", favorite = isFavorite)
 
 fun Artist.toPlayQueueItem(appContext: Context) = RemoteAccessServer.PlayQueueItem(id, title, appContext.resources.getQuantityString(R.plurals.albums_quantity, albumsCount, albumsCount), 0, artworkMrl
-        ?: "", false, "")
+        ?: "", false, "", favorite = isFavorite)
 
 fun Genre.toPlayQueueItem(appContext: Context) = RemoteAccessServer.PlayQueueItem(id, title, appContext.resources.getQuantityString(R.plurals.track_quantity, tracksCount, tracksCount), 0, artworkMrl
-        ?: "", false, "")
+        ?: "", false, "", favorite = isFavorite)
 
 fun Playlist.toPlayQueueItem(appContext: Context) = RemoteAccessServer.PlayQueueItem(id, title, appContext.resources.getQuantityString(R.plurals.track_quantity, tracksCount, tracksCount), 0, artworkMrl
-        ?: "", false, "")
+        ?: "", false, "", favorite = isFavorite)
 
 fun MediaWrapper.toPlayQueueItem(defaultArtist: String = "") = RemoteAccessServer.PlayQueueItem(id, title, artist?.ifEmpty { defaultArtist } ?: defaultArtist, length, artworkMrl
-        ?: "", false, generateResolutionClass(width, height) ?: "", progress = time, played = seen > 0)
+        ?: "", false, generateResolutionClass(width, height) ?: "", progress = time, played = seen > 0, favorite = isFavorite)
 
 fun Folder.toPlayQueueItem(context: Context) = RemoteAccessServer.PlayQueueItem(id, title, context.resources.getQuantityString(org.videolan.vlc.R.plurals.videos_quantity, mediaCount(Folder.TYPE_FOLDER_VIDEO), mediaCount(Folder.TYPE_FOLDER_VIDEO))
         ?: "", 0, artworkMrl
-        ?: "", false,"", videoType = "video-folder")
+        ?: "", false, "", videoType = "video-folder", favorite = isFavorite)
 
 fun VideoGroup.toPlayQueueItem(context: Context) = RemoteAccessServer.PlayQueueItem(id, title, if (this.mediaCount() > 1) context.resources.getQuantityString(org.videolan.vlc.R.plurals.videos_quantity, this.mediaCount(), this.mediaCount()) else "length", 0, artworkMrl
-        ?: "", false,"", videoType = "video-group", played = presentSeen == presentCount && presentCount != 0)
+        ?: "", false, "", played = presentSeen == presentCount && presentCount != 0, videoType = "video-group", favorite = isFavorite)
