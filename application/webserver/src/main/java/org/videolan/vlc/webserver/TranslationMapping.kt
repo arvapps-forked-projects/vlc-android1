@@ -51,6 +51,7 @@ object TranslationMapping {
         SEND_FILES(R.string.ra_send_files),
         DOWNLOAD(R.string.download),
         NO_MEDIA(R.string.nomedia),
+        NO_PLAYLIST(R.string.noplaylist),
         PLAY(R.string.play),
         APPEND(R.string.append),
         PLAY_AS_AUDIO(R.string.play_as_audio),
@@ -101,5 +102,13 @@ object TranslationMapping {
         FAVORITES(R.string.favorites),
         STORAGES(R.string.browser_storages),
         LOCAL_NETWORK(R.string.network_browsing),
+        STREAMS(R.string.streams),
+        LOADING(R.string.loading),
+        ADD_PLAYLIST(R.string.add_to_playlist),
+        ADDING(R.string.adding),
+        TO(R.string.to),
+        NEW_PLAYLIST(R.string.create_new_playlist),
+        CREATE(R.string.create),
+        ADD(R.string.add),
     }
 }
