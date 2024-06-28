@@ -610,6 +610,17 @@
     <string name="whats_new_36_webserver_text">With the new remote access feature, take control of VLC for Android from any other device.\nSend your media both ways, control your playback and much more!</string>
     <string name="whats_new_36_favorites_text">You can now favorite your media, playlists, artists or albums.\nFind your preferred content at a glance by filtering the content by favorites only!</string>
 
+<!--    update-->
+    <string name="update_title">Update available</string>
+    <string name="install_nightly_title">Install the nightly version</string>
+    <string name="update_text">A new nightly release of VLC for Android is available!\n\nYou\'re seeing this because you are using a nightly build.</string>
+    <string name="install_text">Nightly versions are updated automatically everyday with the latest features and fixes.\n\nDownload now?</string>
+
+    <string name="open_in_browser">Open in browser</string>
+    <string name="install">Install</string>
+    <string name="install_nightly">Install the nightly version</string>
+    <string name="install_nightly_alert">Nightly builds are experimental versions updated everyday.\n\nExpect new features but also new bugs!</string>
+
 
     <!-- Accessibility -->
     <string name="more_actions">More Actions</string>
