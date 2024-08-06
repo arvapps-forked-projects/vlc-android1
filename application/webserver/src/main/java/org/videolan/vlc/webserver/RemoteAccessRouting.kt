@@ -481,7 +481,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
 
             val list = ArrayList<RemoteAccessServer.PlayQueueItem>()
             tracks.forEach { track ->
-                list.add(track.toPlayQueueItem())
+                list.add(track.toPlayQueueItem(defaultArtist = appContext.getString(R.string.unknown_artist)))
             }
             val gson = Gson()
             call.respondText(gson.toJson(list))
@@ -553,7 +553,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
 
             val list = ArrayList<RemoteAccessServer.PlayQueueItem>()
             playlist.tracks.forEach { track ->
-                list.add(track.toPlayQueueItem().apply {
+                list.add(track.toPlayQueueItem(defaultArtist = if (track.type == MediaWrapper.TYPE_AUDIO) appContext.getString(R.string.unknown_artist) else "").apply {
                     if (track.type == MediaWrapper.TYPE_VIDEO) fileType = "video"
                 })
             }

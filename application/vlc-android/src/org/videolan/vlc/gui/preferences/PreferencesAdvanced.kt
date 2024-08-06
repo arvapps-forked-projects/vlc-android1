@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.AndroidDevices
+import org.videolan.resources.EXPORT_SETTINGS_FILE
 import org.videolan.resources.KEY_AUDIO_LAST_PLAYLIST
 import org.videolan.resources.KEY_CURRENT_AUDIO
 import org.videolan.resources.KEY_CURRENT_AUDIO_RESUME_ARTIST
@@ -63,8 +64,12 @@ import org.videolan.tools.BitmapCache
 import org.videolan.tools.DAV1D_THREAD_NUMBER
 import org.videolan.tools.Settings
 import org.videolan.tools.putSingle
+import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.DebugLogActivity
+import org.videolan.vlc.gui.browser.EXTRA_MRL
+import org.videolan.vlc.gui.browser.FilePickerActivity
+import org.videolan.vlc.gui.browser.KEY_PICKER_TYPE
 import org.videolan.vlc.gui.dialogs.ConfirmDeleteDialog
 import org.videolan.vlc.gui.dialogs.NEW_INSTALL
 import org.videolan.vlc.gui.dialogs.RenameDialog
@@ -75,6 +80,8 @@ import org.videolan.vlc.gui.helpers.MedialibraryUtils
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.hf.StoragePermissionsDelegate.Companion.getWritePermission
 import org.videolan.vlc.gui.helpers.restartMediaPlayer
+import org.videolan.vlc.gui.preferences.search.PreferenceParser
+import org.videolan.vlc.providers.PickerType
 import org.videolan.vlc.util.AutoUpdate
 import org.videolan.vlc.util.FeatureFlag
 import org.videolan.vlc.util.FileUtils
@@ -82,6 +89,7 @@ import org.videolan.vlc.util.share
 import java.io.File
 import java.io.IOException
 
+private const val FILE_PICKER_RESULT_CODE = 10000
 class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
     override fun getXml() =  R.xml.preferences_adv
@@ -99,6 +107,7 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
             it.filters = arrayOf<InputFilter>(InputFilter.LengthFilter(5))
             it.setSelection(it.editableText.length)
         }
+        if (!BuildConfig.DEBUG) findPreference<Preference>("show_update")?.isVisible  = false
     }
 
     override fun onStart() {
@@ -269,8 +278,44 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
                 loadFragment(PreferencesOptional())
                 return true
             }
+            "export_settings" -> {
+                val dst = File(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + EXPORT_SETTINGS_FILE)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    if (getWritePermission(Uri.fromFile(dst))) {
+                        PreferenceParser.exportPreferences(requireActivity(), dst)
+                    }
+                }
+                return true
+            }
+            "restore_settings" -> {
+                val filePickerIntent = Intent(requireContext(), FilePickerActivity::class.java)
+                filePickerIntent.putExtra(KEY_PICKER_TYPE, PickerType.SETTINGS.ordinal)
+                startActivityForResult(filePickerIntent, FILE_PICKER_RESULT_CODE)
+
+
+
+                return true
+            }
         }
         return super.onPreferenceTreeClick(preference)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (data == null) return
+        if (requestCode == FILE_PICKER_RESULT_CODE) {
+            if (data.hasExtra(EXTRA_MRL)) {
+                lifecycleScope.launch {
+                    lifecycleScope.launch {
+                        PreferenceParser.restoreSettings(requireActivity(), Uri.parse(data.getStringExtra(
+                            EXTRA_MRL
+                        )))
+                    }
+                    VLCInstance.restart()
+                }
+                UiTools.restartDialog(requireActivity())
+            }
+        }
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
