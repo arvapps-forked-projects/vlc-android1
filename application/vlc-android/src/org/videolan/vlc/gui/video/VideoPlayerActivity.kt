@@ -267,6 +267,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     private var savedTime: Long = -1
 
     lateinit var windowLayoutInfo: WindowLayoutInfo
+    private var currentConfirmationDialog: AlertDialog? = null
 
     /**
      * For uninterrupted switching between audio and video mode
@@ -1497,7 +1498,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     private fun volumeDown() {
         service?.let { service ->
             var vol = if (service.volume > 100)
-                (service.volume.toFloat() * audioMax / 100 - 1).roundToInt()
+                (((service.volume * audioMax).div(100)) - 1)
             else
                 audiomanager.getStreamVolume(AudioManager.STREAM_MUSIC) - 1
             vol = vol.coerceAtLeast(0).coerceAtMost(audioMax * if (isAudioBoostEnabled) 2 else 1)
@@ -2330,6 +2331,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             return
         }
         service?.pause()
+        PlaybackService.waitConfirmation.postValue(confirmation.title)
         val inflater = this.layoutInflater
         val dialogView = inflater.inflate(R.layout.dialog_video_resume, null)
         val resumeAllCheck = dialogView.findViewById<CheckBox>(R.id.video_resume_checkbox)
@@ -2344,6 +2346,10 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                     if (resumeAllCheck.isChecked) service?.playlistManager?.videoResumeStatus = ResumeStatus.NEVER
                     lifecycleScope.launch { service?.playlistManager?.playIndex(confirmation.index, confirmation.flags, forceRestart = true) }
                 }
+                .setOnDismissListener {
+                    currentConfirmationDialog = null
+                    PlaybackService.waitConfirmation.postValue(null)
+                }
                 .create().apply {
                     setCancelable(false)
                     setOnKeyListener { dialog, keyCode, _ ->
@@ -2353,6 +2359,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                             true
                         } else false
                     }
+                currentConfirmationDialog = this
                     show()
                 }
     }
@@ -2475,7 +2482,10 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             }
             service.addCallback(this)
             service.playlistManager.waitForConfirmation.observe(this) {
-                if (it != null) showConfirmResumeDialog(it)
+                if (it != null)
+                    showConfirmResumeDialog(it)
+                else
+                    currentConfirmationDialog?.dismiss()
             }
             //if (isTalkbackIsEnabled()) overlayDelegate.showOverlayTimeout(OVERLAY_INFINITE)
         } else if (this.service != null) {

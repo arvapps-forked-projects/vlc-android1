@@ -140,5 +140,9 @@ object TranslationMapping {
         MINUTES(R.string.talkback_minutes),
         VIDEO_PLAYER_REMOTE(R.string.video_player_remote),
         REMOTE_KEYBOARD_NAVIGATION(R.string.remote_keyboard_navigation),
+        RESUME(R.string.resume),
+        CONFIRM_RESUME(R.string.confirm_resume),
+        APPLY_PLAYQUEUE(R.string.apply_playqueue),
+        NO(R.string.no)
     }
 }
