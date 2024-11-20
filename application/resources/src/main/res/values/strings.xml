@@ -85,6 +85,11 @@
     <string name="albums">Albums</string>
     <string name="tracks">Tracks</string>
 
+    <plurals name="saved_bookmarks_quantity">
+        <item quantity="one">1 Saved Bookmark</item>
+        <item quantity="other">%d Saved Bookmarks</item>
+    </plurals>
+
     <plurals name="albums_quantity">
         <item quantity="one">1 album</item>
         <item quantity="other">%d albums</item>
@@ -1014,6 +1019,9 @@
     <string name="audio_delay_bt">Audio delay set to %s ms for the bluetooth device</string>
     <string name="warning_stream_speed">Increasing playback speed over 1 for streams may cause stuttering</string>
     <string name="go_to_folder">Browse parent</string>
+    <string name="go_to_album">Go to album</string>
+    <string name="go_to_artist">Go to artist</string>
+    <string name="go_to_album_artist">Go to album artist</string>
     <string name="create_shortcut">Create a launcher shortcut</string>
     <string name="no_sub_renderer">Subtitles are not yet supported while casting</string>
     <string name="enqueuing">Loading your media</string>
@@ -1294,4 +1302,17 @@
     <string name="restore_settings">Restore settings</string>
     <string name="export_settings_success">Settings exported successfully to the internal storage root</string>
     <string name="export_settings_failure">Something went wrong while exporting your settings</string>
+
+    <string name="queue_info">Queue information</string>
+    <string name="queue_info_none">Do not show queue position</string>
+    <string name="queue_info_before_title">Before title</string>
+    <string name="queue_info_after_title">After title</string>
+    <string name="queue_info_before_subtitle">Before subtitle</string>
+
+    <string name="title_size">Title text size</string>
+    <string name="subtitle_size">Subtitle text size</string>
+
+    <string name="queue_format">Queue format</string>
+    <string name="queue_format_short_desc">Queue position</string>
+    <string name="queue_format_long_desc">Queue position / Queue size</string>
 </resources>

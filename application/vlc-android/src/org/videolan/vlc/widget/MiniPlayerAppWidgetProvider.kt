@@ -268,8 +268,8 @@ class MiniPlayerAppWidgetProvider : AppWidgetProvider() {
         }
 
         val artist = when {
-            forPreview -> widgetCacheEntry.currentMedia?.artist
-            playing -> service?.artist ?: widgetCacheEntry.currentMedia?.artist
+            forPreview -> widgetCacheEntry.currentMedia?.artistName
+            playing -> service?.artist ?: widgetCacheEntry.currentMedia?.artistName
             else -> settings.getString(KEY_CURRENT_AUDIO_RESUME_ARTIST, "")
         }
         setupTexts(context, views, widgetType, title, artist)
@@ -435,8 +435,11 @@ class MiniPlayerAppWidgetProvider : AppWidgetProvider() {
                 MediaWrapper.TYPE_AUDIO,
                 "Track name",
                 "",
+                -1L,
+                -1L,
                 "Artist name",
                 "",
+                -1L,
                 "",
                 "",
                 0,
@@ -468,7 +471,7 @@ class MiniPlayerAppWidgetProvider : AppWidgetProvider() {
     private fun setupTexts(context: Context, views: RemoteViews, widgetType: WidgetType, title: String?, artist: String?) {
         log(-1, WidgetLogType.INFO, "setupTexts: $title /// $artist")
         views.setTextViewText(R.id.songName, title)
-        views.setTextViewText(R.id.artist, if (!artist.isNullOrBlank()) "${if (widgetType == WidgetType.MACRO) "" else " ${TextUtils.separator} "}$artist" else artist)
+        views.setTextViewText(R.id.artist, if (!artist.isNullOrBlank()) "${if (widgetType == WidgetType.MACRO) "" else " ${TextUtils.SEPARATOR} "}$artist" else artist)
         if (title == context.getString(R.string.widget_default_text)) {
             views.setViewVisibility(R.id.app_name, View.VISIBLE)
             views.setViewVisibility(R.id.songName, View.GONE)

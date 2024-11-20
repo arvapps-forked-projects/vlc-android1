@@ -23,6 +23,7 @@
 
 package org.videolan.vlc.gui.audio
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Bundle
@@ -47,10 +48,14 @@ import kotlinx.coroutines.withContext
 import org.videolan.medialibrary.interfaces.media.*
 import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.resources.*
+import org.videolan.resources.util.getFromMl
 import org.videolan.tools.*
 import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.ContentActivity
+import org.videolan.vlc.gui.HeaderMediaListActivity
+import org.videolan.vlc.gui.HeaderMediaListActivity.Companion.ARTIST_FROM_ALBUM
+import org.videolan.vlc.gui.SecondaryActivity
 import org.videolan.vlc.gui.browser.MediaBrowserFragment
 import org.videolan.vlc.gui.dialogs.CtxActionReceiver
 import org.videolan.vlc.gui.dialogs.SavePlaylistDialog
@@ -382,6 +387,7 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
             MediaLibraryItem.TYPE_MEDIA -> {
                 createCtxTrackFlags().apply {
                     if ((item as? MediaWrapper)?.isFavorite == true) add(CTX_FAV_REMOVE) else add(CTX_FAV_ADD)
+                    if ((item as? MediaWrapper)?.artistId != (item as? MediaWrapper)?.albumArtistId) add(CTX_GO_TO_ALBUM_ARTIST)
                 }
             }
             MediaLibraryItem.TYPE_ARTIST -> {
@@ -442,6 +448,29 @@ abstract class BaseAudioBrowser<T : MedialibraryViewModel> : MediaBrowserFragmen
                 }
             }
             CTX_INFORMATION -> showInfoDialog(media)
+            CTX_GO_TO_ALBUM -> lifecycleScope.launch(Dispatchers.IO) {
+                val i = Intent(activity, HeaderMediaListActivity::class.java)
+                i.putExtra(AudioBrowserFragment.TAG_ITEM, (media as MediaWrapper).album)
+                startActivity(i)
+            }
+            CTX_GO_TO_ARTIST -> lifecycleScope.launch(Dispatchers.IO) {
+                val artist = if (media is Album) media.retrieveAlbumArtist() else (media as MediaWrapper).artist
+                val i = Intent(requireActivity(), SecondaryActivity::class.java)
+                i.putExtra(SecondaryActivity.KEY_FRAGMENT, SecondaryActivity.ALBUMS_SONGS)
+                i.putExtra(AudioBrowserFragment.TAG_ITEM, artist)
+                i.putExtra(ARTIST_FROM_ALBUM, true)
+                i.flags = i.flags or Intent.FLAG_ACTIVITY_NO_HISTORY
+                startActivity(i)
+            }
+            CTX_GO_TO_ALBUM_ARTIST -> lifecycleScope.launch(Dispatchers.IO) {
+                val artist = (media as MediaWrapper).albumArtist
+                val i = Intent(requireActivity(), SecondaryActivity::class.java)
+                i.putExtra(SecondaryActivity.KEY_FRAGMENT, SecondaryActivity.ALBUMS_SONGS)
+                i.putExtra(AudioBrowserFragment.TAG_ITEM, artist)
+                i.putExtra(ARTIST_FROM_ALBUM, true)
+                i.flags = i.flags or Intent.FLAG_ACTIVITY_NO_HISTORY
+                startActivity(i)
+            }
             CTX_DELETE -> removeItem(media)
             CTX_APPEND -> MediaUtils.appendMedia(requireActivity(), media.tracks)
             CTX_PLAY_NEXT -> MediaUtils.insertNext(requireActivity(), media.tracks)

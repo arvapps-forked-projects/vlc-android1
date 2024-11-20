@@ -299,7 +299,7 @@ object MediaUtils {
     fun getMediaArtist(ctx: Context, media: MediaWrapper?): String = when {
         media == null -> getMediaString(ctx, R.string.unknown_artist)
         media.type == MediaWrapper.TYPE_VIDEO -> ""
-        media.artist != null -> media.artist
+        media.artistName != null -> media.artistName
         media.nowPlaying != null -> media.title
         isSchemeStreaming(media.uri.scheme) -> ""
         else -> getMediaString(ctx, R.string.unknown_artist)
@@ -307,12 +307,12 @@ object MediaUtils {
 
     fun getMediaReferenceArtist(ctx: Context, media: MediaWrapper?) = getMediaArtist(ctx, media)
 
-    fun getMediaAlbumArtist(ctx: Context, media: MediaWrapper?) = media?.albumArtist
+    fun getMediaAlbumArtist(ctx: Context, media: MediaWrapper?) = media?.albumArtistName
             ?: getMediaString(ctx, R.string.unknown_artist)
 
     fun getMediaAlbum(ctx: Context, media: MediaWrapper?): String = when {
         media == null -> getMediaString(ctx, R.string.unknown_album)
-        media.album != null -> media.album
+        media.albumName != null -> media.albumName
         media.nowPlaying != null -> ""
         isSchemeStreaming(media.uri.scheme) -> ""
         else -> getMediaString(ctx, R.string.unknown_album)
@@ -329,21 +329,27 @@ object MediaUtils {
         }
         val suffix = when {
             media.type == MediaWrapper.TYPE_VIDEO -> generateResolutionClass(media.width, media.height)
-            media.length > 0L -> media.artist
+            media.length > 0L -> media.artistName
             isSchemeStreaming(media.uri.scheme) -> media.uri.toString()
-            else -> media.artist
+            else -> media.artistName
         }
         return TextUtils.separatedString(prefix, suffix)
     }
 
-    fun getDisplaySubtitle(ctx: Context, media: MediaWrapper, mediaPosition: Int, mediaSize: Int): String {
+    fun getDisplaySubtitle(ctx: Context, media: MediaWrapper): String? {
         val album = getMediaAlbum(ctx, media)
         val artist = getMediaArtist(ctx, media)
         val isAlbumUnknown = album == getMediaString(ctx, R.string.unknown_album)
         val isArtistUnknown = artist == getMediaString(ctx, R.string.unknown_artist)
-        val prefix = if (mediaSize > 1) "${mediaPosition + 1} / $mediaSize" else null
-        val suffix = if (!isArtistUnknown && !isAlbumUnknown) TextUtils.separatedString('-', artist.markBidi(), album.markBidi()) else null
-        return TextUtils.separatedString(prefix, suffix)
+        return if (!isArtistUnknown && !isAlbumUnknown) TextUtils.separatedString(artist.markBidi(), album.markBidi()) else null
+    }
+
+    fun getQueuePosition(mediaPosition: Int, mediaSize: Int, shortQueue: Boolean = false): String? {
+        return when {
+            shortQueue && mediaSize > 1 -> "${mediaPosition + 1}"
+            mediaSize > 1 -> "${mediaPosition + 1} / $mediaSize"
+            else -> null
+        }
     }
 
     fun getMediaTitle(mediaWrapper: MediaWrapper) = mediaWrapper.title

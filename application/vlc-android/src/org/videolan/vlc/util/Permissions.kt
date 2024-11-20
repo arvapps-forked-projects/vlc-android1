@@ -52,6 +52,7 @@ import org.videolan.tools.isCallable
 import org.videolan.tools.putSingle
 import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
+import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.gui.helpers.hf.StoragePermissionsDelegate.Companion.askStoragePermission
 import org.videolan.vlc.gui.helpers.hf.WriteExternalDelegate
 
@@ -111,6 +112,10 @@ object Permissions {
      * @return true if the app has been granted the whole permissions including [Manifest.permission.MANAGE_EXTERNAL_STORAGE]
      */
     fun hasAllAccess(context: Context) = !Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.fromParts(SCHEME_PACKAGE, context.packageName, null)).isCallable(context) || isExternalStorageManager()
+
+    fun canCheckBluetoothDevices(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    }
 
     @JvmOverloads
     fun canWriteStorage(context: Context = AppContextProvider.appContext): Boolean {
@@ -317,7 +322,7 @@ object Permissions {
                 askWriteStoragePermission(activity, false, callback)
                 return false
             }
-        } else if (AndroidUtil.isLolliPopOrLater && WriteExternalDelegate.needsWritePermission(uri)) {
+        } else if (VlcMigrationHelper.isLolliPopOrLater && WriteExternalDelegate.needsWritePermission(uri)) {
             WriteExternalDelegate.askForExtWrite(activity, uri, callback)
             return false
         }
