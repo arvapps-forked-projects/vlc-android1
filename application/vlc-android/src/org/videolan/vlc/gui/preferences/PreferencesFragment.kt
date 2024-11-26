@@ -57,7 +57,9 @@ import org.videolan.vlc.R
 import org.videolan.vlc.gui.PinCodeActivity
 import org.videolan.vlc.gui.PinCodeReason
 import org.videolan.vlc.gui.SecondaryActivity
+import org.videolan.vlc.gui.dialogs.AboutVersionDialog
 import org.videolan.vlc.gui.dialogs.ConfirmAudioPlayQueueDialog
+import org.videolan.vlc.gui.dialogs.PermissionListDialog
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.preferences.search.PreferenceItem
 import org.videolan.vlc.util.Permissions
@@ -87,6 +89,7 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         findPreference<Preference>("remote_access_category")?.isVisible = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
+        findPreference<Preference>("permissions_title")?.isVisible = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -146,6 +149,10 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
                     val intent = PinCodeActivity.getIntent(requireActivity(), PinCodeReason.FIRST_CREATION)
                     pinCodeResult.launch(intent)
                 }
+            }
+            "permissions" -> {
+                PermissionListDialog.newInstance().show(requireActivity().supportFragmentManager, "PermissionListDialog")
+
             }
             "remote_access_category" -> loadFragment(PreferencesRemoteAccess())
             "android_auto_category" -> loadFragment(PreferencesAndroidAuto())

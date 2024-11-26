@@ -25,6 +25,7 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
 import android.view.*
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.coordinatorlayout.widget.CoordinatorLayout
@@ -147,6 +148,15 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
         lifecycleScope.launch {
             waitForML()
             viewModel.provider.pagedList.observe(this@VideoGridFragment) {
+//                if (!Permissions.canReadVideos(AppContextProvider.appContext)) {
+//                    if (viewModel.provider.isEmpty())
+//                        viewModel.provider.clear()
+//                    else
+//                        lifecycleScope.launch(Dispatchers.Main) {
+//                            updateEmptyView()
+//                        }
+//                    return@observe
+//                }
                 @Suppress("UNCHECKED_CAST")
                 (it as? PagedList<MediaLibraryItem>)?.let { pagedList -> videoListAdapter.submitList(pagedList) }
                 updateEmptyView()
@@ -349,6 +359,7 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
         binding.emptyLoading.emptyText = viewModel.filterQuery?.let {  getString(R.string.empty_search, it) } ?: if (viewModel.provider.onlyFavorites) getString(R.string.nofav) else getString(R.string.nomedia)
         binding.emptyLoading.state = when {
             !Permissions.canReadStorage(AppContextProvider.appContext) && empty -> EmptyLoadingState.MISSING_PERMISSION
+            !Permissions.canReadVideos(AppContextProvider.appContext) && empty -> EmptyLoadingState.MISSING_VIDEO_PERMISSION
             empty && working -> EmptyLoadingState.LOADING
             empty && !working && viewModel.provider.onlyFavorites -> EmptyLoadingState.EMPTY_FAVORITES
             empty && !working && viewModel.filterQuery == null -> EmptyLoadingState.EMPTY

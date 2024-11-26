@@ -89,6 +89,7 @@ import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.MediaLibraryItem
 import org.videolan.tools.AppScope
 import org.videolan.tools.KEYSTORE_PASSWORD
+import org.videolan.tools.KEY_REMOTE_ACCESS_LAST_STATE_STOPPED
 import org.videolan.tools.NetworkMonitor
 import org.videolan.tools.REMOTE_ACCESS_NETWORK_BROWSER_CONTENT
 import org.videolan.tools.Settings
@@ -192,6 +193,7 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
                     releaseCallbacks()
                 }
                 .launchIn(AppScope)
+        Log.i(TAG, "Server stopped")
         _serverStatus.postValue(ServerStatus.STOPPED)
         settings = Settings.getInstance(context)
     }
@@ -202,7 +204,10 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
      * Also start monitoring the network shares for the web browser
      */
     suspend fun start() {
+        Settings.getInstance(context).putSingle(
+            KEY_REMOTE_ACCESS_LAST_STATE_STOPPED, false)
         clearFileDownloads()
+        Log.i(TAG, "Server connecting")
         _serverStatus.postValue(ServerStatus.CONNECTING)
         scope.launch {
             engine = generateServer()
@@ -229,6 +234,7 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
      */
     suspend fun stop() {
         clearFileDownloads()
+        Log.i(TAG, "Server stopping")
         _serverStatus.postValue(ServerStatus.STOPPING)
         withContext(Dispatchers.IO) {
             RemoteAccessWebSockets.closeAllSessions()
@@ -502,6 +508,7 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
         }.apply {
             environment.monitor.subscribe(ApplicationStarted) {
                 _serverStatus.postValue(ServerStatus.STARTED)
+                Log.i(TAG, "Server started")
                 AppScope.launch(Dispatchers.Main) {
                     PlaylistManager.showAudioPlayer.observeForever(miniPlayerObserver)
                     DialogActivity.loginDialogShown.observeForever(loginObserver)

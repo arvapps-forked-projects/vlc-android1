@@ -663,9 +663,6 @@
     <string name="widget_default_text" translatable="false">VLC media player</string>
     <string name="allow_storage_access_title">Allow VLC to access video and audio files</string>
     <string name="allow_storage_access_description">VLC needs you to grant this permission to access the media files on this device.</string>
-    <string name="allow_storage_manager_title">Allow VLC all file access</string>
-    <string name="allow_storage_manager_description">%s\n\nGrant permission?</string>
-    <string name="allow_storage_manager_explanation">To get all the capabilities of VLC and the support of all types of media files, we strongly suggest you to grant this permission.</string>
     <string name="partial_content">VLC cannot access all of your files</string>
     <string name="partial_content_description">Starting with Android 11, applications need a special permission to access all device\'s files.\n\n%s</string>
     <string name="never_ask_again">Never ask again</string>
@@ -839,6 +836,8 @@
     <string name="welcome_title">Welcome to VLC!</string>
     <string name="welcome_subtitle">The free and open source multimedia player</string>
     <string name="permission_media">VLC needs your permission to access media on your device</string>
+    <string name="permission_video">VLC needs your permission to access video media on your device</string>
+    <string name="permission_audio">VLC needs your permission to access audio media on your device</string>
     <string name="medialibrary_scan_explanation">VLC can automatically scan your device to organize your media collection.</string>
     <string name="onboarding_theme_title">Make yourself at home</string>
     <string name="done">Done</string>
@@ -1111,6 +1110,14 @@
     <string name="notification_permission">Notification permission</string>
     <string name="notification_permission_explanation">VLC needs your permission to send notifications.\nThe app will only notify you when scanning your media or using the custom video Picture in Picture.\nRefusing it won\'t prevent VLC to work, however the notifications will be hidden.</string>
     <string name="permission">Permission</string>
+    <string name="permission_no_access">No file access</string>
+    <string name="permissions">Permissions</string>
+    <string name="permissions_summary">List of all the permissions</string>
+    <string name="manage_storage_permission">File permissions</string>
+    <string name="permission_media_title">Access to standard media</string>
+    <string name="permission_all_title">All file access</string>
+    <string name="permission_all_warning">To enable this, you have to disable the standard media file access first</string>
+    <string name="permission_media_warning">To enable this, you have to disable the full file permission first</string>
     <string name="customize">Customize</string>
     <string name="selection_count">%d selected</string>
     <string name="control_setting">Control settings</string>
