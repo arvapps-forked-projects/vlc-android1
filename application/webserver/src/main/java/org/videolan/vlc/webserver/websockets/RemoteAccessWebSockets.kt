@@ -29,9 +29,10 @@ import android.content.SharedPreferences
 import android.media.AudioManager
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
-import com.google.gson.Gson
+import androidx.annotation.MainThread
+import com.squareup.moshi.Moshi
 import io.ktor.server.routing.Routing
-import io.ktor.server.websocket.DefaultWebSocketServerSession
+import io.ktor.server.websocket.WebSocketServerSession
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
@@ -48,45 +49,61 @@ import org.videolan.vlc.R
 import org.videolan.vlc.gui.video.VideoPlayerActivity
 import org.videolan.vlc.webserver.BuildConfig
 import org.videolan.vlc.webserver.RemoteAccessServer
+import org.videolan.vlc.webserver.convertToJson
 import org.videolan.vlc.webserver.ssl.SecretGenerator
+import org.videolan.vlc.webserver.websockets.IncomingMessageType.*
 import java.util.Calendar
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 object RemoteAccessWebSockets {
-    val messageQueue: ArrayList<RemoteAccessServer.WSMessage> = arrayListOf()
-    private const val TAG = "HttpSharingServerWS"
-    private var websocketSession: ArrayList<DefaultWebSocketServerSession> = arrayListOf()
-    private val tickets = ArrayList<WSAuthTicket>()
-    val onPlaybackEventChannel = Channel<String>()
+    private const val TAG = "VLC/HttpSharingServerWS"
 
-
+    val onPlaybackEventChannel = Channel<RemoteAccessServer.WSMessage>()
+    val messageQueue: LinkedBlockingQueue<RemoteAccessServer.WSMessage> = LinkedBlockingQueue()
+    private val webSocketSessions: MutableMap<Int, WebSocketServerSession> = ConcurrentHashMap()
+    private val tickets: MutableList<WSAuthTicket> = Collections.synchronizedList(mutableListOf())
+    private val sessionIds = AtomicInteger(0)
 
     fun Routing.setupWebSockets(context: Context, settings: SharedPreferences) {
         webSocket("/echo", protocol = "player") {
-            websocketSession.add(this)
-            // Handle a WebSocket session
-            for (frame in incoming) {
-                try {
-                    frame as? Frame.Text ?: continue
-                    val message = frame.readText()
-                    val gson = Gson()
-                    val incomingMessage = gson.fromJson(message, WSIncomingMessage::class.java)
-                    if (BuildConfig.DEBUG) Log.i(TAG, "Received: $message")
-                    if (!verifyWebsocketAuth(incomingMessage)) {
-                        send(Frame.Text(Gson().toJson(RemoteAccessServer.WebSocketAuthorization("forbidden", initialMessage = message))))
-                    } else {
-                        val service = RemoteAccessServer.getInstance(context).service
-                        manageIncomingMessages(incomingMessage, settings, service, context)
+            val sessionId = sessionIds.incrementAndGet()
+            try {
+                webSocketSessions[sessionId] = this
+                if (BuildConfig.DEBUG) Log.d(TAG, "WebSockets: Started session: $sessionId")
+                val moshi = Moshi.Builder().build().adapter(WSIncomingMessage::class.java)
+                // Handle a WebSocket session
+                for (frame in incoming) {
+                    try {
+                        frame as? Frame.Text ?: continue
+                        val message = frame.readText()
+                        val incomingMessage = moshi.fromJson(message) ?: continue
+                        if (BuildConfig.DEBUG) Log.i(TAG, "WebSockets: Received message '$message'")
+                        if (!verifyWebsocketAuth(incomingMessage)) {
+                            send(Frame.Text(convertToJson(RemoteAccessServer.WebSocketAuthorization("forbidden", initialMessage = message))))
+                        } else {
+                            val service = RemoteAccessServer.getInstance(context).service
+                            withContext(Dispatchers.Main) {
+                                manageIncomingMessages(incomingMessage, settings, service, context)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, e.message, e)
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, e.message, e)
                 }
+            } finally {
+                webSocketSessions.remove(sessionId)?.close()
+                if (BuildConfig.DEBUG) Log.d(TAG, "WebSockets: Removed and closed session: $sessionId")
             }
-            websocketSession.remove(this)
         }
     }
 
     /**
-     * Manage incoming messages from the client, either from websockets or long polling
+     * Manage incoming messages from the client, either from websockets or long polling.
+     *
+     * Run this handler on the main thread to simplify calls to PlaybackService.
      *
      * @param incomingMessage the incoming message
      * @param settings the shared preferences
@@ -94,217 +111,135 @@ object RemoteAccessWebSockets {
      * @param context the context
      * @return true if the message has been handled, false if playback control is not allowed
      */
-    fun manageIncomingMessages(
+    @MainThread
+    suspend fun manageIncomingMessages(
         incomingMessage: WSIncomingMessage,
         settings: SharedPreferences,
         service: PlaybackService?,
         context: Context,
-    ):Boolean {
-        when (incomingMessage.message) {
-            "hello" -> {}
-            "play" -> if (playbackControlAllowedOrSend(settings)) service?.play() else return false
-            "pause" -> if (playbackControlAllowedOrSend(settings)) service?.pause() else return false
-            "previous" -> if (playbackControlAllowedOrSend(settings)) service?.previous(false) else return false
-            "next" -> if (playbackControlAllowedOrSend(settings)) service?.next() else return false
-            "previous10" -> if (playbackControlAllowedOrSend(settings)) service?.let {
-                it.seek(
-                    (it.getTime() - 10000).coerceAtLeast(
-                        0
-                    ), fromUser = true
-                )
-            } else return false
+    ): Boolean {
+        val incomingMessageType = IncomingMessageType.fromString(incomingMessage.message)
+        if (incomingMessageType == null) {
+            Log.w(TAG, "Unrecognized message", IllegalStateException("Unrecognized message: '$incomingMessage'"))
+            return false
+        }
+        // Verify playback control is enabled
+        if (incomingMessageType.controlRequired && !playbackControlAllowedOrSend(settings)) return false
 
-            "next10" -> if (playbackControlAllowedOrSend(settings)) service?.let {
-                it.seek(
-                    (it.getTime() + 10000).coerceAtMost(
-                        it.length
-                    ), fromUser = true
-                )
-            } else return false
+        when (incomingMessageType) {
+            HELLO -> {}
+            PLAY -> service?.play()
+            PAUSE -> service?.pause()
+            PREVIOUS -> service?.previous(false)
+            NEXT -> service?.next()
+            PREVIOUS10 -> service?.let { it.seek((it.getTime() - 10000).coerceAtLeast(0), fromUser = true) }
+            NEXT10 -> service?.let { it.seek((it.getTime() + 10000).coerceAtMost(it.length), fromUser = true) }
+            SHUFFLE -> service?.shuffle()
+            REPEAT -> {
+                service?.let {
+                    when (it.repeatType) {
+                        PlaybackStateCompat.REPEAT_MODE_NONE -> {
+                            it.repeatType = PlaybackStateCompat.REPEAT_MODE_ONE
+                        }
 
-            "shuffle" -> if (playbackControlAllowedOrSend(settings)) service?.shuffle() else return false
-            "repeat" -> if (playbackControlAllowedOrSend(settings)) service?.let {
-                when (it.repeatType) {
-                    PlaybackStateCompat.REPEAT_MODE_NONE -> {
-                        it.repeatType = PlaybackStateCompat.REPEAT_MODE_ONE
-                    }
+                        PlaybackStateCompat.REPEAT_MODE_ONE -> if (it.hasPlaylist()) {
+                            it.repeatType = PlaybackStateCompat.REPEAT_MODE_ALL
+                        } else {
+                            it.repeatType = PlaybackStateCompat.REPEAT_MODE_NONE
+                        }
 
-                    PlaybackStateCompat.REPEAT_MODE_ONE -> if (it.hasPlaylist()) {
-                        it.repeatType = PlaybackStateCompat.REPEAT_MODE_ALL
-                    } else {
-                        it.repeatType = PlaybackStateCompat.REPEAT_MODE_NONE
-                    }
-
-                    PlaybackStateCompat.REPEAT_MODE_ALL -> {
-                        it.repeatType = PlaybackStateCompat.REPEAT_MODE_NONE
-                    }
-                }
-            } else return false
-
-            "get-volume" -> {
-                AppScope.launch {
-                    websocketSession.forEach {
-                        it.send(
-                            Frame.Text(
-                                getVolumeMessage(
-                                    context,
-                                    service
-                                )
-                            )
-                        )
+                        PlaybackStateCompat.REPEAT_MODE_ALL -> {
+                            it.repeatType = PlaybackStateCompat.REPEAT_MODE_NONE
+                        }
                     }
                 }
             }
-
-            "set-volume" -> {
-                if (playbackControlAllowedOrSend(settings)) (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.let {
-                    val max = it.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                    it.setStreamVolume(
-                        AudioManager.STREAM_MUSIC,
-                        ((incomingMessage.id!!.toFloat() / 100) * max).toInt(),
-                        AudioManager.FLAG_SHOW_UI
-                    )
-
-                } else return false
-
+            GET_VOLUME -> {
+                val message = Frame.Text(getVolumeMessage(context, service))
+                webSocketSessions.forEach { (_, session) -> session.send(message) }
             }
-
-            "set-progress" -> {
-                if (playbackControlAllowedOrSend(settings)) incomingMessage.id?.let {
-                    service?.setTime(it.toLong())
-                } else return false
+            SET_VOLUME -> {
+                incomingMessage.id?.let { volume ->
+                    (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.let { audioManager ->
+                        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, ((volume.toFloat() / 100) * max).toInt(), AudioManager.FLAG_SHOW_UI)
+                    }
+                }
             }
-
-                        "play-chapter" -> {
-                            incomingMessage.id?.let { id ->
-                                if (playbackControlAllowedOrSend(settings)) service?.chapterIdx = id
+            SET_PROGRESS -> incomingMessage.id?.let { time -> service?.setTime(time.toLong()) }
+            PLAY_CHAPTER -> incomingMessage.id?.let { index -> service?.chapterIdx = index }
+            SPEED -> incomingMessage.floatValue?.let { speed -> service?.setRate(speed, true) }
+            SLEEP_TIMER -> {
+                incomingMessage.longValue?.let { sleepTimerEnd ->
+                    val sleepTime = Calendar.getInstance()
+                    sleepTime.timeInMillis += sleepTimerEnd
+                    sleepTime.set(Calendar.SECOND, 0)
+                    service?.setSleepTimer(sleepTime)
+                    service?.sleepTimerInterval = sleepTimerEnd
+                    RemoteAccessServer.getInstance(context).generateNowPlaying()?.let { sendToAll(it) }
+                }
+            }
+            SLEEP_TIMER_WAIT -> {
+                incomingMessage.stringValue?.let { waitForMediaEnd ->
+                    service?.waitForMediaEnd = (waitForMediaEnd == "true")
+                    RemoteAccessServer.getInstance(context).generateNowPlaying()?.let { sendToAll(it) }
+                }
+            }
+            SLEEP_TIMER_RESET -> {
+                incomingMessage.stringValue?.let { resetOnInteraction ->
+                    service?.resetOnInteraction = (resetOnInteraction == "true")
+                    RemoteAccessServer.getInstance(context).generateNowPlaying()?.let { sendToAll(it) }
+                }
+            }
+            ADD_BOOKMARK -> {
+                incomingMessage.longValue?.let { bookmarkTime ->
+                    service?.let {
+                        it.currentMediaWrapper?.let { media ->
+                            AppScope.launch(Dispatchers.IO) {
+                                val bookmark = media.addBookmark(bookmarkTime)
+                                bookmark?.setName(context.getString(R.string.bookmark_default_name, Tools.millisToString(it.getTime())))
                             }
                         }
-                        "speed" -> {
-                            incomingMessage.floatValue?.let { speed ->
-                                if (playbackControlAllowedOrSend(settings)) service?.setRate(speed, true)
-                            }
+                    }
+                }
+            }
+            DELETE_BOOKMARK -> {
+                incomingMessage.longValue?.let { bookmarkTime ->
+                    service?.currentMediaWrapper?.let { media ->
+                        AppScope.launch(Dispatchers.IO) {
+                            media.removeBookmark(bookmarkTime)
                         }
-                        "sleep-timer" -> {
-                            incomingMessage.longValue?.let { sleepTimerEnd ->
-                                val sleepTime = Calendar.getInstance()
-                                sleepTime.timeInMillis += sleepTimerEnd
-                                sleepTime.set(Calendar.SECOND, 0)
-                                AppScope.launch(Dispatchers.Main) {
-                                    service?.setSleepTimer(sleepTime)
-                                }
-                                if (playbackControlAllowedOrSend(settings)) service?.sleepTimerInterval = sleepTimerEnd
-                                AppScope.launch {
-                                    RemoteAccessServer.getInstance(context).generateNowPlaying()?.let { nowPlaying ->
-                                        AppScope.launch { sendToAll(nowPlaying) }
-                                    }
-                                }
-                            }
-                        }
-                        "sleep-timer-wait" -> {
-                            incomingMessage.stringValue?.let { waitForMediaEnd ->
-                                service?.waitForMediaEnd = waitForMediaEnd == "true"
-                                AppScope.launch {
-                                    RemoteAccessServer.getInstance(context).generateNowPlaying()?.let { nowPlaying ->
-                                        AppScope.launch { sendToAll(nowPlaying) }
-                                    }
-                                }
-                            }
-                        }
-                        "sleep-timer-reset" -> {
-                            incomingMessage.stringValue?.let { resetOnInteraction ->
-                                service?.resetOnInteraction = resetOnInteraction == "true"
-                                AppScope.launch {
-                                    RemoteAccessServer.getInstance(context).generateNowPlaying()?.let { nowPlaying ->
-                                        AppScope.launch { sendToAll(nowPlaying) }
-                                    }
-                                }
-                            }
-                        }
-                        "add-bookmark" -> {
-                            incomingMessage.longValue?.let { time ->
-                                service?.currentMediaWrapper?.let {
-                                    AppScope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            val bookmark = it.addBookmark(time)
-                                            bookmark?.setName(context.getString(R.string.bookmark_default_name, Tools.millisToString(service!!.getTime())))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        "delete-bookmark" -> {
-                            incomingMessage.longValue?.let { bookmarkTime ->
-                                service?.currentMediaWrapper?.let { media ->
-                                    AppScope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            media.removeBookmark(bookmarkTime)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-            "rename-bookmark" -> {
+                    }
+                }
+            }
+            RENAME_BOOKMARK -> {
                 incomingMessage.longValue?.let { bookmarkTime ->
                     incomingMessage.stringValue?.let { bookmarkName ->
                         service?.currentMediaWrapper?.let { media ->
-                            AppScope.launch {
-                                withContext(Dispatchers.IO) {
-                                    media.bookmarks.firstOrNull { it.time == bookmarkTime }?.setName(bookmarkName)
-                                }
+                            AppScope.launch(Dispatchers.IO) {
+                                media.bookmarks.firstOrNull { it.time == bookmarkTime }?.setName(bookmarkName)
                             }
                         }
                     }
                 }
             }
-            "play-media" -> {
-                if (playbackControlAllowedOrSend(settings)) service?.playIndex(incomingMessage.id!!) else return false
-
+            PLAY_MEDIA -> incomingMessage.id?.let { index -> service?.playIndex(index) }
+            DELETE_MEDIA -> incomingMessage.id?.let { index -> service?.remove(index) }
+            MOVE_MEDIA_BOTTOM -> {
+                incomingMessage.id?.let { index ->
+                    service?.let {
+                        if (index < (it.playlistManager?.getMediaListSize() ?: 0) - 1)
+                            it.moveItem(index, index + 2)
+                    }
+                }
             }
-
-            "delete-media" -> {
-                if (playbackControlAllowedOrSend(settings)) service?.remove(incomingMessage.id!!) else return false
-
-            }
-
-            "move-media-bottom" -> {
-                if (playbackControlAllowedOrSend(settings)) {
-                    val index = incomingMessage.id!!
-                    if (index < (service?.playlistManager?.getMediaListSize()
-                            ?: 0) - 1
-                    )
-                        service?.moveItem(index, index + 2)
-                } else return false
-
-            }
-
-            "move-media-top" -> {
-                if (playbackControlAllowedOrSend(settings)) {
-                    val index = incomingMessage.id!!
+            MOVE_MEDIA_TOP -> {
+                incomingMessage.id?.let { index ->
                     if (index > 0)
                         service?.moveItem(index, index - 1)
-                } else return false
-
+                }
             }
-            "remote" -> {
-                if (playbackControlAllowedOrSend(settings)) {
-                    incomingMessage.stringValue?.let {
-                       AppScope.launch {
-                           VideoPlayerActivity.videoRemoteFlow.emit(it)
-                       }
-                    }
-                } else return false
-
-            }
-
-            else -> {
-                Log.w(
-                    TAG,
-                    "Unrecognized message",
-                    IllegalStateException("Unrecognized message: $incomingMessage")
-                )
-                return false
-            }
+            REMOTE -> incomingMessage.stringValue?.let { action -> VideoPlayerActivity.videoRemoteFlow.emit(action) }
         }
         return true
     }
@@ -316,14 +251,18 @@ object RemoteAccessWebSockets {
      * @return true if the websocket message is allowed
      */
     private fun verifyWebsocketAuth(incomingMessage: WSIncomingMessage?): Boolean {
-        tickets.removeIf { it.expiration < System.currentTimeMillis() }
-        return incomingMessage?.authTicket != null && tickets.firstOrNull { incomingMessage.authTicket == it.id } != null
+        synchronized(tickets) {
+            tickets.removeIf { it.expiration < System.currentTimeMillis() }
+            return incomingMessage?.authTicket != null && tickets.firstOrNull { incomingMessage.authTicket == it.id } != null
+        }
     }
 
     private fun playbackControlAllowedOrSend(settings: SharedPreferences): Boolean {
         val allowed = settings.getBoolean(REMOTE_ACCESS_PLAYBACK_CONTROL, true)
-        val message = Gson().toJson(RemoteAccessServer.PlaybackControlForbidden())
-        if (!allowed) AppScope.launch { websocketSession.forEach { it.send(Frame.Text(message)) } }
+        if (!allowed) {
+            val message = convertToJson(RemoteAccessServer.PlaybackControlForbidden())
+            AppScope.launch { webSocketSessions.forEach { (_, session) -> session.send(Frame.Text(message)) } }
+        }
         return allowed
     }
 
@@ -333,7 +272,6 @@ object RemoteAccessWebSockets {
      * @return an [String] describing the volume message
      */
     private fun getVolumeMessage(context: Context, service: PlaybackService?): String {
-        val gson = Gson()
         val volume = when {
             service?.isVideoPlaying == true && service.volume > 100 -> service.volume
             else -> {
@@ -345,7 +283,7 @@ object RemoteAccessWebSockets {
                         ?: 0
             }
         }
-        return gson.toJson(RemoteAccessServer.Volume(volume))
+        return convertToJson(RemoteAccessServer.Volume(volume))
     }
 
     fun createTicket(): String {
@@ -355,21 +293,18 @@ object RemoteAccessWebSockets {
     }
 
    suspend fun sendToAll(messageObj: RemoteAccessServer.WSMessage) {
-       val message = Gson().toJson(messageObj)
+       val message = convertToJson(messageObj)
        addToQueue(messageObj)
-       onPlaybackEventChannel.trySend(message)
-       if (BuildConfig.DEBUG) Log.d(TAG, "WebSockets: sendToAll called on ${websocketSession.size} sessions with message '$message'")
-       val iterator = ArrayList(websocketSession).iterator()
-       val toRemove = hashSetOf<DefaultWebSocketServerSession>()
-       while (iterator.hasNext()) {
-           val connection = iterator.next()
+       onPlaybackEventChannel.trySend(messageObj)
+       if (BuildConfig.DEBUG) Log.d(TAG, "WebSockets: sendToAll called on ${webSocketSessions.size} sessions with message '$message'")
+       webSocketSessions.forEach { (sessionId, session) ->
            try {
-               connection.send(Frame.Text(message))
+               session.send(Frame.Text(message))
            } catch (e: Exception) {
-               toRemove.add(connection)
+               webSocketSessions.remove(sessionId)?.close()
+               if (BuildConfig.DEBUG) Log.d(TAG, "WebSockets: Exception caught. Session removed and closed: $sessionId", e)
            }
        }
-       websocketSession.removeAll(toRemove)
    }
 
     /**
@@ -378,21 +313,20 @@ object RemoteAccessWebSockets {
      * @param wsMessage the message to send
      */
     private fun addToQueue(wsMessage: RemoteAccessServer.WSMessage) {
-        val typesDuplicates = arrayOf("now-playing", "play-queue", "auth", "volume", "player-status", "login-needed", "ml-refresh-needed", "playback-control-forbidden")
-        if (wsMessage.type in typesDuplicates) {
-            try {
-                messageQueue.removeIf { it.type == wsMessage.type }
-            } catch (_: ConcurrentModificationException) {
-            }
+        when (wsMessage.type) {
+            // Duplicate browser description messages are OK
+            RemoteAccessServer.WSMessageType.BROWSER_DESCRIPTION -> {}
+            else -> messageQueue.removeIf { it.type == wsMessage.type }
         }
         messageQueue.add(wsMessage)
     }
 
     suspend fun closeAllSessions() {
-        val iterator = ArrayList(websocketSession).iterator()
-        while (iterator.hasNext()) {
-            val connection = iterator.next()
-            connection.close()
+        if (BuildConfig.DEBUG) Log.d(TAG, "WebSockets: Closing ${webSocketSessions.size} sessions")
+        webSocketSessions.forEach { (sessionId, session) ->
+            session.close()
+            if (BuildConfig.DEBUG) Log.d(TAG, "WebSockets: Closed sessionId: $sessionId")
         }
+        webSocketSessions.clear()
     }
 }

@@ -32,9 +32,13 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.squareup.moshi.Json
+import io.ktor.http.CacheControl
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.CachingOptions
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.ApplicationStopped
@@ -48,6 +52,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.engine.sslConnector
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
+import io.ktor.server.plugins.cachingheaders.CachingHeaders
 import io.ktor.server.plugins.callloging.CallLogging
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.origin
@@ -122,12 +127,12 @@ import java.security.SecureRandom
 import java.security.Security
 import java.security.cert.X509Certificate
 import java.time.Duration
+import java.util.Calendar
 import java.util.Collections
-import java.util.Date
 import java.util.Locale
 
 
-private const val TAG = "HttpSharingServer"
+private const val TAG = "VLC/HttpSharingServer"
 private const val NOW_PLAYING_TIMEOUT = 500
 
 class RemoteAccessServer(private val context: Context) : PlaybackService.Callback, IPathOperationDelegate by PathOperationDelegate(), ICallBackHandler by CallBackDelegate()  {
@@ -322,8 +327,17 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
         //If needed, we can add a setting to let the user revoking the certificate by deleting the keystore file to start all this process over
         val cert: X509Certificate
         try {
+            val cal = Calendar.getInstance()
+            // Start Date
+            // Roll back the date by one day to prevent issues with client clock time sync
+            cal.roll(Calendar.DAY_OF_MONTH, false)
+            val notBefore = cal.time
+            // Expiration Date
+            cal.add(Calendar.YEAR, 25)
+            val notAfter = cal.time
+            // Build Certificate
             val owner = X500Name("CN=vlc-android, O=VideoLAN, L=Paris, C=France")
-            val builder: X509v3CertificateBuilder = JcaX509v3CertificateBuilder(owner, BigInteger(64, random), Date(System.currentTimeMillis() - 86400000L), Date(System.currentTimeMillis() + (25 * 86400000L)), owner, keypair.public)
+            val builder: X509v3CertificateBuilder = JcaX509v3CertificateBuilder(owner, BigInteger(64, random), notBefore, notAfter, owner, keypair.public)
 
             val signer: ContentSigner = JcaContentSignerBuilder("SHA256WithRSAEncryption").build(privateKey)
             val certHolder: X509CertificateHolder = builder.build(signer)
@@ -477,6 +491,29 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
                     timeout = Duration.ofSeconds(15)
                     maxFrameSize = Long.MAX_VALUE
                     masking = false
+                }
+                install(CachingHeaders) {
+                    options { _, content ->
+                        when (content.contentType?.withoutParameters()) {
+                            ContentType.Text.Plain,
+                            ContentType.Application.Json -> {
+                                CachingOptions(CacheControl.NoStore(CacheControl.Visibility.Private))
+                            }
+                            ContentType.Image.GIF,
+                            ContentType.Image.PNG,
+                            ContentType.Image.SVG,
+                            ContentType.Image.JPEG,
+                            ContentType.Image.XIcon,
+                            ContentType.Text.CSS,
+                            ContentType.Text.Xml,
+                            ContentType.Text.Html,
+                            ContentType.Text.JavaScript,
+                            ContentType.Application.JavaScript -> {
+                                CachingOptions(CacheControl.MaxAge(maxAgeSeconds = 86400, visibility = CacheControl.Visibility.Private))
+                            }
+                            else -> null
+                        }
+                    }
                 }
                 install(CORS) {
                     allowMethod(HttpMethod.Options)
@@ -764,26 +801,26 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
         return list
     }
 
-    abstract class WSMessage(val type: String)
+    abstract class WSMessage(val type: WSMessageType)
     data class NowPlaying(val title: String, val artist: String, val playing: Boolean, val isVideoPlaying: Boolean, val progress: Long,
                           val duration: Long, val id: Long, val artworkURL: String, val uri: String, val volume: Int, val speed: Float,
                           val sleepTimer: Long, val waitForMediaEnd:Boolean, val resetOnInteraction:Boolean, val shuffle: Boolean, val repeat: Int,
                           val shouldShow: Boolean = PlaylistManager.playingState.value ?: false,
-                          val bookmarks:List<WSBookmark> = listOf(), val chapters:List<WSChapter> = listOf()) : WSMessage("now-playing")
+                          val bookmarks: List<WSBookmark> = listOf(), val chapters: List<WSChapter> = listOf()) : WSMessage(WSMessageType.NOW_PLAYING)
 
     data class WSBookmark(val id:Long, val title: String, val time: Long)
     data class WSChapter(val title: String, val time: Long)
 
-    data class PlayQueue(val medias: List<PlayQueueItem>) : WSMessage("play-queue")
+    data class PlayQueue(val medias: List<PlayQueueItem>) : WSMessage(WSMessageType.PLAY_QUEUE)
     data class PlayQueueItem(val id: Long, val title: String, val artist: String, val duration: Long, val artworkURL: String, val playing: Boolean, val resolution: String = "", val path: String = "", val isFolder: Boolean = false, val progress: Long = 0L, val played: Boolean = false, var fileType: String = "", val favorite: Boolean = false)
-    data class WebSocketAuthorization(val status:String, val initialMessage:String) : WSMessage("auth")
-    data class Volume(val volume: Int) : WSMessage("volume")
-    data class PlayerStatus(val playing: Boolean) : WSMessage("player-status")
-    data class LoginNeeded(val dialogOpened: Boolean) : WSMessage("login-needed")
-    data class ResumeConfirmationNeeded(val mediaTitle: String?, val consumed:Boolean) : WSMessage("resume-confirmation")
-    data class MLRefreshNeeded(val refreshNeeded: Boolean = true) : WSMessage("ml-refresh-needed")
-    data class BrowserDescription(val path: String, val description:String) : WSMessage("browser-description")
-    data class PlaybackControlForbidden(val forbidden: Boolean = true): WSMessage("playback-control-forbidden")
+    data class WebSocketAuthorization(val status:String, val initialMessage:String) : WSMessage(WSMessageType.AUTH)
+    data class Volume(val volume: Int) : WSMessage(WSMessageType.VOLUME)
+    data class PlayerStatus(val playing: Boolean) : WSMessage(WSMessageType.PLAYER_STATUS)
+    data class LoginNeeded(val dialogOpened: Boolean) : WSMessage(WSMessageType.LOGIN_NEEDED)
+    data class ResumeConfirmationNeeded(val mediaTitle: String?, val consumed: Boolean) : WSMessage(WSMessageType.RESUME_CONFIRMATION)
+    data class MLRefreshNeeded(val refreshNeeded: Boolean = true) : WSMessage(WSMessageType.ML_REFRESH_NEEDED)
+    data class BrowserDescription(val path: String, val description: String) : WSMessage(WSMessageType.BROWSER_DESCRIPTION)
+    data class PlaybackControlForbidden(val forbidden: Boolean = true): WSMessage(WSMessageType.PLAYBACK_CONTROL_FORBIDDEN)
     data class SearchResults(val albums: List<PlayQueueItem>, val artists: List<PlayQueueItem>, val genres: List<PlayQueueItem>, val playlists: List<PlayQueueItem>, val videos: List<PlayQueueItem>, val tracks: List<PlayQueueItem>)
     data class BreadcrumbItem(val title: String, val path: String)
     data class BrowsingResult(val content: List<PlayQueueItem>, val breadcrumb: List<BreadcrumbItem>)
@@ -810,4 +847,26 @@ class RemoteAccessServer(private val context: Context) : PlaybackService.Callbac
 
     data class RemoteAccessConnection(val ip: String)
 
+    enum class WSMessageType {
+        @Json(name = "now-playing")
+        NOW_PLAYING,
+        @Json(name = "play-queue")
+        PLAY_QUEUE,
+        @Json(name = "auth")
+        AUTH,
+        @Json(name = "volume")
+        VOLUME,
+        @Json(name = "player-status")
+        PLAYER_STATUS,
+        @Json(name = "login-needed")
+        LOGIN_NEEDED,
+        @Json(name = "resume-confirmation")
+        RESUME_CONFIRMATION,
+        @Json(name = "ml-refresh-needed")
+        ML_REFRESH_NEEDED,
+        @Json(name = "browser-description")
+        BROWSER_DESCRIPTION,
+        @Json(name = "playback-control-forbidden")
+        PLAYBACK_CONTROL_FORBIDDEN
+    }
 }
