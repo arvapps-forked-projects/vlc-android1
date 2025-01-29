@@ -9,7 +9,7 @@ variables:
   VLC_ANDROID_IMAGE_30: registry.videolan.org/vlc-debian-android-3.0:20230621085943
   VLC_ANDROID_IMAGE_40: registry.videolan.org/vlc-debian-android:20240731083648
   VLC_WEB_BUILD_IMAGE: registry.videolan.org/videolan-alpine-node:20230523124511
-  WEBSERVER_DIR: "./remoteaccess"
+  WEBSERVER_DIR: "./application/remote-access-client/remoteaccess"
 
 default:
   before_script: |
@@ -53,7 +53,7 @@ webserver-install-dependencies:
       - npm install
     artifacts:
       paths:
-        - remoteaccess/
+        - application/remote-access-client/remoteaccess/
       when: on_success
       expire_in: 1h
 
@@ -67,7 +67,7 @@ webserver-build:
         - npm run build-android
     artifacts:
       paths:
-        - remoteaccess/
+        - application/remote-access-client/remoteaccess/
       when: on_success
       expire_in: 1h
 
@@ -466,7 +466,7 @@ publish_remote_access_lib:
     script:
         - mkdir -p $M2_REPO
         - ./buildsystem/compile.sh --init -b
-        - GRADLE_ABI=ALL RELEASE_SIGNING_ENABLED=false ./gradlew -Dmaven.repo.local=$M2_REPO -p application/webserver publishToMavenLocal
+        - GRADLE_ABI=ALL RELEASE_SIGNING_ENABLED=false ./gradlew -Dmaven.repo.local=$M2_REPO -p application/remote-access-client publishToMavenLocal
     artifacts:
         name: "${CI_COMMIT_TAG}"
         paths:

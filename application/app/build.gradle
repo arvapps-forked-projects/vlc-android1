@@ -162,12 +162,9 @@ android {
 dependencies {
     implementation project(':application:vlc-android')
     implementation project(':application:television')
-    devImplementation project(':application:webserver')
-    debugImplementation project(':application:webserver')
-    releaseImplementation "org.videolan.android:remote-access:$rootProject.ext.remoteAccessVersion"
-    vlcBundleImplementation "org.videolan.android:remote-access:$rootProject.ext.remoteAccessVersion"
+    implementation project(':application:remote-access-server')
     testImplementation project(':application:television')
-    testImplementation project(':application:webserver')
+    testImplementation project(':application:remote-access-server')
 
     androidTestImplementation "androidx.test.espresso:espresso-contrib:$rootProject.espressoVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$rootProject.espressoVersion"

@@ -725,10 +725,16 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             }
             player.setSpuTrack(media.getMetaLong(MediaWrapper.META_SUBTITLE_TRACK).toString())
             player.setSpuDelay(media.getMetaLong(MediaWrapper.META_SUBTITLE_DELAY))
-            val rateString = if (settings.getBoolean(PLAYBACK_HISTORY, true)) media.getMetaString(MediaWrapper.META_SPEED) else null
-            if (!rateString.isNullOrEmpty()) {
-                player.setRate(rateString.toFloat(), false)
-            }
+            restoreSpeed(media)
+        } else if (media.isPodcast) {
+            restoreSpeed(media)
+        }
+    }
+
+    private fun restoreSpeed(media: MediaWrapper) {
+        val rateString = if (settings.getBoolean(PLAYBACK_HISTORY, true)) media.getMetaString(MediaWrapper.META_SPEED) else null
+        if (!rateString.isNullOrEmpty()) {
+            player.setRate(rateString.toFloat(), false)
         }
     }
 
@@ -1185,8 +1191,11 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 }
                 MediaPlayer.Event.TimeChanged -> {
                     abRepeat.value?.let {
+                        val fastSeek = settings.getBoolean("always_fast_seek", false)
                         if (it.stop != -1L && player.getCurrentTime() > it.stop) service.setTime(it.start, false)
-                        if (player.getCurrentTime() < it.start) service.setTime(it.start, false)
+                        if ((fastSeek && player.getCurrentTime() < it.start - 30000L)
+                            || (!fastSeek && player.getCurrentTime() < it.start))
+                            service.setTime(it.start, false)
                     }
                     if (player.getCurrentTime() % 10 == 0L) savePosition()
                     val now = System.currentTimeMillis()
