@@ -77,13 +77,14 @@ import org.videolan.resources.MOVIEPEDIA_ACTIVITY
 import org.videolan.resources.MOVIEPEDIA_MEDIA
 import org.videolan.resources.util.getFromMl
 import org.videolan.resources.util.parcelable
+import org.videolan.resources.util.parcelableList
 import org.videolan.tools.BROWSER_DISPLAY_IN_CARDS
 import org.videolan.tools.BROWSER_SHOW_HIDDEN_FILES
 import org.videolan.tools.BROWSER_SHOW_ONLY_MULTIMEDIA
-import org.videolan.tools.PLAYLIST_MODE_AUDIO
-import org.videolan.tools.PLAYLIST_MODE_VIDEO
 import org.videolan.tools.KeyHelper
 import org.videolan.tools.MultiSelectHelper
+import org.videolan.tools.PLAYLIST_MODE_AUDIO
+import org.videolan.tools.PLAYLIST_MODE_VIDEO
 import org.videolan.tools.Settings
 import org.videolan.tools.dp
 import org.videolan.tools.isStarted
@@ -95,11 +96,16 @@ import org.videolan.vlc.R
 import org.videolan.vlc.databinding.DirectoryBrowserBinding
 import org.videolan.vlc.gui.AudioPlayerContainerActivity
 import org.videolan.vlc.gui.MainActivity
+import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_MEDIALIST
+import org.videolan.vlc.gui.dialogs.CONFIRM_DELETE_DIALOG_RESULT
+import org.videolan.vlc.gui.dialogs.CONFIRM_RENAME_DIALOG_RESULT
 import org.videolan.vlc.gui.dialogs.CURRENT_SORT
 import org.videolan.vlc.gui.dialogs.ConfirmDeleteDialog
 import org.videolan.vlc.gui.dialogs.CtxActionReceiver
 import org.videolan.vlc.gui.dialogs.DISPLAY_IN_CARDS
 import org.videolan.vlc.gui.dialogs.DisplaySettingsDialog
+import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_MEDIA
+import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_NEW_NAME
 import org.videolan.vlc.gui.dialogs.RenameDialog
 import org.videolan.vlc.gui.dialogs.SHOW_HIDDEN_FILES
 import org.videolan.vlc.gui.dialogs.SHOW_ONLY_MULTIMEDIA_FILES
@@ -286,6 +292,34 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
                         needRefresh.postValue(false)
                     }
                 }
+            }
+        }
+        requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_DELETE_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
+            val items: List<MediaWrapper> = bundle.parcelableList(CONFIRM_DELETE_DIALOG_MEDIALIST) ?: listOf()
+            if (items.isNotEmpty()) {
+                val mw = items[0]
+                val deleteAction = Runnable {
+                    lifecycleScope.launch {
+                        MediaUtils.deleteItem(requireActivity(), mw) { viewModel.refresh() }
+                        viewModel.remove(mw)
+                    }
+                }
+                if (Permissions.checkWritePermission(requireActivity(), mw, deleteAction)) deleteAction.run()
+            }
+        }
+        requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_RENAME_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
+            val media = bundle.parcelable<MediaLibraryItem>(RENAME_DIALOG_MEDIA) ?: return@setFragmentResultListener
+            val name = bundle.getString(RENAME_DIALOG_NEW_NAME) ?: return@setFragmentResultListener
+            lifecycleScope.launch(Dispatchers.IO) {
+                (media as MediaWrapper).uri.path?.let { File(it) }?.let { file ->
+                    if (file.exists()) {
+                        file.parent?.let {
+                            val newFile = File("$it/$name")
+                            file.renameTo(newFile)
+                        }
+                    }
+                }
+                viewModel.refresh()
             }
         }
     }
@@ -536,17 +570,9 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
     override fun removeItem(item: MediaLibraryItem): Boolean {
         val mw = item as? MediaWrapper
                 ?: return false
-        val deleteAction = Runnable {
-            lifecycleScope.launch {
-                MediaUtils.deleteItem(requireActivity(), mw) { viewModel.refresh() }
-                viewModel.remove(mw)
-            }
-        }
+
         val dialog = ConfirmDeleteDialog.newInstance(arrayListOf(mw))
         dialog.show(requireActivity().supportFragmentManager, ConfirmDeleteDialog::class.simpleName)
-        dialog.setListener {
-            if (Permissions.checkWritePermission(requireActivity(), mw, deleteAction)) deleteAction.run()
-        }
         return true
     }
 
@@ -807,19 +833,6 @@ abstract class BaseBrowserFragment : MediaBrowserFragment<BrowserModel>(), IRefr
             CTX_RENAME -> {
                 val dialog = RenameDialog.newInstance(mw, true)
                 dialog.show(requireActivity().supportFragmentManager, RenameDialog::class.simpleName)
-                dialog.setListener { item, name ->
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        (item as MediaWrapper).uri.path?.let { File(it) }?.let { file ->
-                            if (file.exists()) {
-                                file.parent?.let {
-                                    val newFile = File("$it/$name")
-                                    file.renameTo(newFile)
-                                }
-                            }
-                        }
-                        viewModel.refresh()
-                    }
-                }
             }
 
             CTX_INFORMATION -> requireActivity().showMediaInfo(mw)

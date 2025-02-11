@@ -24,8 +24,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
-import android.view.*
-import android.widget.Toast
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.coordinatorlayout.widget.CoordinatorLayout
@@ -50,15 +53,52 @@ import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.interfaces.media.VideoGroup
 import org.videolan.medialibrary.media.FolderImpl
 import org.videolan.medialibrary.media.MediaLibraryItem
-import org.videolan.resources.*
+import org.videolan.resources.AppContextProvider
+import org.videolan.resources.GROUP_VIDEOS_FOLDER
+import org.videolan.resources.GROUP_VIDEOS_NAME
+import org.videolan.resources.GROUP_VIDEOS_NONE
+import org.videolan.resources.KEY_FOLDER
+import org.videolan.resources.KEY_GROUP
+import org.videolan.resources.KEY_GROUPING
+import org.videolan.resources.KEY_GROUP_VIDEOS
+import org.videolan.resources.KEY_MEDIA_LAST_PLAYLIST
+import org.videolan.resources.KEY_VIDEOS_CARDS
+import org.videolan.resources.MOVIEPEDIA_ACTIVITY
+import org.videolan.resources.MOVIEPEDIA_MEDIA
+import org.videolan.resources.PLAYLIST_TYPE_VIDEO
+import org.videolan.resources.UPDATE_SEEN
 import org.videolan.resources.util.parcelable
+import org.videolan.resources.util.parcelableArray
+import org.videolan.resources.util.parcelableList
 import org.videolan.resources.util.waitForML
-import org.videolan.tools.*
+import org.videolan.tools.MultiSelectHelper
+import org.videolan.tools.PLAYBACK_HISTORY
+import org.videolan.tools.RESULT_RESTART
+import org.videolan.tools.Settings
+import org.videolan.tools.dp
+import org.videolan.tools.isStarted
+import org.videolan.tools.putSingle
+import org.videolan.tools.retrieveParent
 import org.videolan.vlc.R
 import org.videolan.vlc.databinding.VideoGridBinding
 import org.videolan.vlc.gui.SecondaryActivity
 import org.videolan.vlc.gui.browser.MediaBrowserFragment
-import org.videolan.vlc.gui.dialogs.*
+import org.videolan.vlc.gui.dialogs.AddToGroupDialog
+import org.videolan.vlc.gui.dialogs.CONFIRM_ADD_TO_GROUP_RESULT
+import org.videolan.vlc.gui.dialogs.CONFIRM_PERMISSION_CHANGED
+import org.videolan.vlc.gui.dialogs.CONFIRM_RENAME_DIALOG_RESULT
+import org.videolan.vlc.gui.dialogs.CURRENT_SORT
+import org.videolan.vlc.gui.dialogs.CtxActionReceiver
+import org.videolan.vlc.gui.dialogs.DISPLAY_IN_CARDS
+import org.videolan.vlc.gui.dialogs.DisplaySettingsDialog
+import org.videolan.vlc.gui.dialogs.KEY_PERMISSION_CHANGED
+import org.videolan.vlc.gui.dialogs.ONLY_FAVS
+import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_MEDIA
+import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_NEW_NAME
+import org.videolan.vlc.gui.dialogs.RenameDialog
+import org.videolan.vlc.gui.dialogs.SavePlaylistDialog
+import org.videolan.vlc.gui.dialogs.VIDEO_GROUPING
+import org.videolan.vlc.gui.dialogs.showContext
 import org.videolan.vlc.gui.helpers.AudioUtil.setRingtone
 import org.videolan.vlc.gui.helpers.ItemOffsetDecoration
 import org.videolan.vlc.gui.helpers.MedialibraryUtils
@@ -74,11 +114,44 @@ import org.videolan.vlc.media.PlaylistManager
 import org.videolan.vlc.media.getAll
 import org.videolan.vlc.providers.medialibrary.VideosProvider
 import org.videolan.vlc.reloadLibrary
-import org.videolan.vlc.util.*
-import org.videolan.vlc.util.ContextOption.*
+import org.videolan.vlc.util.ContextOption
+import org.videolan.vlc.util.ContextOption.CTX_ADD_GROUP
+import org.videolan.vlc.util.ContextOption.CTX_ADD_SHORTCUT
+import org.videolan.vlc.util.ContextOption.CTX_ADD_TO_PLAYLIST
+import org.videolan.vlc.util.ContextOption.CTX_APPEND
+import org.videolan.vlc.util.ContextOption.CTX_BAN_FOLDER
+import org.videolan.vlc.util.ContextOption.CTX_DELETE
+import org.videolan.vlc.util.ContextOption.CTX_DOWNLOAD_SUBTITLES
+import org.videolan.vlc.util.ContextOption.CTX_FAV_ADD
+import org.videolan.vlc.util.ContextOption.CTX_FAV_REMOVE
+import org.videolan.vlc.util.ContextOption.CTX_FIND_METADATA
+import org.videolan.vlc.util.ContextOption.CTX_GO_TO_FOLDER
+import org.videolan.vlc.util.ContextOption.CTX_GROUP_SIMILAR
+import org.videolan.vlc.util.ContextOption.CTX_INFORMATION
+import org.videolan.vlc.util.ContextOption.CTX_MARK_ALL_AS_PLAYED
+import org.videolan.vlc.util.ContextOption.CTX_MARK_ALL_AS_UNPLAYED
+import org.videolan.vlc.util.ContextOption.CTX_MARK_AS_PLAYED
+import org.videolan.vlc.util.ContextOption.CTX_MARK_AS_UNPLAYED
+import org.videolan.vlc.util.ContextOption.CTX_PLAY
+import org.videolan.vlc.util.ContextOption.CTX_PLAY_ALL
+import org.videolan.vlc.util.ContextOption.CTX_PLAY_AS_AUDIO
+import org.videolan.vlc.util.ContextOption.CTX_PLAY_FROM_START
+import org.videolan.vlc.util.ContextOption.CTX_PLAY_NEXT
+import org.videolan.vlc.util.ContextOption.CTX_REMOVE_GROUP
+import org.videolan.vlc.util.ContextOption.CTX_RENAME_GROUP
+import org.videolan.vlc.util.ContextOption.CTX_SET_RINGTONE
+import org.videolan.vlc.util.ContextOption.CTX_SHARE
+import org.videolan.vlc.util.ContextOption.CTX_UNGROUP
 import org.videolan.vlc.util.ContextOption.Companion.createCtxFolderFlags
 import org.videolan.vlc.util.ContextOption.Companion.createCtxVideoFlags
 import org.videolan.vlc.util.ContextOption.Companion.createCtxVideoGroupFlags
+import org.videolan.vlc.util.Permissions
+import org.videolan.vlc.util.isMissing
+import org.videolan.vlc.util.isTalkbackIsEnabled
+import org.videolan.vlc.util.launchWhenStarted
+import org.videolan.vlc.util.onAnyChange
+import org.videolan.vlc.util.share
+import org.videolan.vlc.util.showParentFolder
 import org.videolan.vlc.viewmodels.mobile.VideoGroupingType
 import org.videolan.vlc.viewmodels.mobile.VideosViewModel
 import org.videolan.vlc.viewmodels.mobile.getViewModel
@@ -189,7 +262,7 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
                 viewModel.group?.let { renameGroup(it) }
             }
             R.id.ungroup -> {
-                viewModel.group?.let { lifecycleScope.launch{if (requireActivity().showPinIfNeeded()) viewModel.ungroup(it) } }
+                viewModel.group?.let { lifecycleScope.launch{if (!requireActivity().showPinIfNeeded()) viewModel.ungroup(it) } }
             }
             R.id.play_all -> {
                 onFabPlayClick(binding.root)
@@ -250,6 +323,28 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
         binding.fastScroller.setRecyclerView(binding.videoGrid, viewModel.provider)
 
         (parentFragment as? VideoBrowserFragment)?.videoGridOnlyFavorites = viewModel.provider.onlyFavorites
+        requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_ADD_TO_GROUP_RESULT, viewLifecycleOwner) { requestKey, bundle ->
+            lifecycleScope.launch {
+                val selection = bundle.parcelableArray<MediaWrapper>(AddToGroupDialog.KEY_TRACKS) ?: arrayOf()
+                viewModel.createGroup(selection.toList())?.let {
+                    // we already are in a group. Finishing to avoid stacking multiple group activities
+                    if (viewModel.groupingType == VideoGroupingType.NONE) requireActivity().finish()
+                    activity?.open(it)
+                }
+            }
+        }
+        requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_RENAME_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
+            val media = bundle.parcelable<MediaLibraryItem>(RENAME_DIALOG_MEDIA) ?: return@setFragmentResultListener
+            val name = bundle.getString(RENAME_DIALOG_NEW_NAME) ?: return@setFragmentResultListener
+            viewModel.renameGroup(media as VideoGroup, name)
+            (activity as? AppCompatActivity)?.run {
+                supportActionBar?.title = name
+            }
+        }
+        requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_PERMISSION_CHANGED, viewLifecycleOwner) { requestKey, bundle ->
+            val changed = bundle.getBoolean(KEY_PERMISSION_CHANGED)
+            if (changed) viewModel.refresh()
+        }
     }
 
     override fun onDisplaySettingChanged(key: String, value: Any) {
@@ -490,15 +585,7 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
     }
 
     private fun addToGroup(selection: List<MediaLibraryItem>) {
-        requireActivity().addToGroup(selection.getAll(), selection.size == 1) {
-            lifecycleScope.launch {
-                viewModel.createGroup(selection.getAll())?.let {
-                    // we already are in a group. Finishing to avoid stacking multiple group activities
-                    if (viewModel.groupingType == VideoGroupingType.NONE) requireActivity().finish()
-                    activity?.open(it)
-                }
-            }
-        }
+        requireActivity().addToGroup(selection.getAll(), selection.size == 1)
     }
 
     override fun onDestroyActionMode(mode: ActionMode) {
@@ -538,7 +625,7 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
                 }
                 CTX_SHARE -> lifecycleScope.launch { (requireActivity() as AppCompatActivity).share(media) }
                 CTX_REMOVE_GROUP -> viewModel.removeFromGroup(media)
-                CTX_ADD_GROUP -> requireActivity().addToGroup(listOf(media), true) {}
+                CTX_ADD_GROUP -> requireActivity().addToGroup(listOf(media), true)
                 CTX_GROUP_SIMILAR -> lifecycleScope.launch { if (!requireActivity().showPinIfNeeded()) viewModel.groupSimilar(media) }
                 CTX_MARK_AS_PLAYED -> lifecycleScope.launch { viewModel.markAsPlayed(media) }
                 CTX_MARK_AS_UNPLAYED -> lifecycleScope.launch { viewModel.markAsUnplayed(media) }
@@ -570,7 +657,7 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
                 CTX_UNGROUP -> lifecycleScope.launch { if (!requireActivity().showPinIfNeeded()) viewModel.ungroup(media) }
                 CTX_MARK_ALL_AS_PLAYED -> lifecycleScope.launch { viewModel.markAsPlayed(media) }
                 CTX_MARK_ALL_AS_UNPLAYED -> lifecycleScope.launch { viewModel.markAsUnplayed(media) }
-                CTX_ADD_GROUP -> requireActivity().addToGroup(listOf(media).getAll(), true) {}
+                CTX_ADD_GROUP -> requireActivity().addToGroup(listOf(media).getAll(), true)
                 CTX_FAV_ADD, CTX_FAV_REMOVE -> lifecycleScope.launch(Dispatchers.IO) {
                     media.isFavorite = option == CTX_FAV_ADD
                 }
@@ -601,12 +688,6 @@ class VideoGridFragment : MediaBrowserFragment<VideosViewModel>(), SwipeRefreshL
 
     private fun renameGroup(media: VideoGroup) {
         val dialog = RenameDialog.newInstance(media)
-        dialog.setListener { item, name ->
-            viewModel.renameGroup(item as VideoGroup, name)
-                (activity as? AppCompatActivity)?.run {
-                    supportActionBar?.title = name
-                }
-        }
         dialog.show(requireActivity().supportFragmentManager, RenameDialog::class.simpleName)
     }
 
