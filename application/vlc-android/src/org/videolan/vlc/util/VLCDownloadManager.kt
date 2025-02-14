@@ -33,6 +33,7 @@ object VLCDownloadManager: BroadcastReceiver(), DefaultLifecycleObserver {
     private val downloadManager = AppContextProvider.appContext.getSystemService<DownloadManager>()!!
     private var dlDeferred : CompletableDeferred<SubDlResult>? = null
     private lateinit var defaultSubsDirectory : String
+    private val TAG = this::class.java.name
 
     override fun onReceive(context: Context, intent: Intent?) {
         intent?.run {
@@ -84,10 +85,20 @@ object VLCDownloadManager: BroadcastReceiver(), DefaultLifecycleObserver {
 
     private suspend fun downloadSuccessful(id:Long, subtitleItem: SubtitleItem, localUri: String, context: FragmentActivity) {
         val extractDirectory = getFinalDirectory(context, subtitleItem) ?: return
+        // Some filenames from opensubtitles.org had characters not authorized for an Android Uri
+        // This sanitizes the filename so it can be used as dest in copyFile
+        // cf https://www.rfc-editor.org/rfc/rfc2396 #2.4.3 mentionned in the Uri.parse method doc
+        subtitleItem.fileName = subtitleItem.fileName
+            .replace("\"", "")
+            .replace("<", "")
+            .replace(">", "")
+            .replace("#", "")
+            .replace("%", "")
         FileUtils.copyFile(localUri, "$extractDirectory/${subtitleItem.fileName}")?.let {dest ->
             subtitleItem.run {
                 ExternalSubRepository.getInstance(context).removeDownloadingItem(id)
-                if (Extensions.SUBTITLES.contains(".${dest.split('.').last()}")) {
+                val fileExtention = ".${dest.split('.').last()}"
+                if (Extensions.SUBTITLES.contains(fileExtention)) {
                     ExternalSubRepository.getInstance(context).saveDownloadedSubtitle(
                         idSubtitle,
                         dest,
@@ -97,11 +108,18 @@ object VLCDownloadManager: BroadcastReceiver(), DefaultLifecycleObserver {
                         hearingImpaired
                     )
                 }
-                else
-                    Toast.makeText(context, R.string.subtitles_download_failed, Toast.LENGTH_SHORT).show()
+                else {
+                    Log.e(TAG, "downloadSuccessful: Bad subtitle extension: $fileExtention")
+                    Toast.makeText(context, R.string.subtitles_download_failed, Toast.LENGTH_LONG)
+                        .show()
+                }
         }
 
             withContext(Dispatchers.IO) { FileUtils.deleteFile(localUri) }
+        } ?: run {
+            Log.e(TAG, "downloadSuccessful: Failed to copy subtitle file")
+            ExternalSubRepository.getInstance(context).removeDownloadingItem(id)
+            Toast.makeText(context, R.string.subtitles_download_failed, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -116,7 +134,7 @@ object VLCDownloadManager: BroadcastReceiver(), DefaultLifecycleObserver {
     }
 
     private fun downloadFailed(id: Long, context: Context) {
-        Toast.makeText(context, R.string.subtitles_download_failed, Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, R.string.subtitles_download_failed, Toast.LENGTH_LONG).show()
         ExternalSubRepository.getInstance(context).removeDownloadingItem(id)
     }
 
