@@ -118,6 +118,9 @@ const val KEY_AUDIO_JUMP_DELAY = "audio_jump_delay"
 const val KEY_AUDIO_LONG_JUMP_DELAY = "audio_long_jump_delay"
 const val KEY_AUDIO_FORCE_SHUFFLE = "audio_force_shuffle"
 const val KEY_AUDIO_SHOW_TRACK_NUMBERS = "audio_show_track_numbers"
+const val KEY_AUDIO_SHOW_CHAPTER_BUTTONS = "audio_show_chapter_buttons"
+const val KEY_AUDIO_SHOW_BOOkMARK_BUTTONS = "audio_show_bookmark_buttons"
+const val KEY_AUDIO_SHOW_BOOKMARK_MARKERS = "audio_show_bookmark_markers"
 
 
 // AudioPlayer
@@ -154,6 +157,7 @@ const val ENCRYPTED_KEY_NAME = "encryption_key"
 const val PREF_TIPS_SHOWN = "video_player_tips_shown"
 const val PREF_WIDGETS_TIPS_SHOWN = "widgets_tips_shown"
 const val PREF_RESTORE_VIDEO_TIPS_SHOWN = "pref_restore_video_tips_shown"
+const val PREF_SHOW_VIDEO_SETTINGS_DISCLAIMER = "pref_show_video_settings_disclaimer"
 
 const val PREF_TV_UI = "tv_ui"
 const val PLAYLIST_MODE_VIDEO = "playlist_mode_video"

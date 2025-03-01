@@ -55,17 +55,39 @@ import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import com.google.android.material.bottomsheet.BottomSheetBehavior
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.medialibrary.Tools
 import org.videolan.medialibrary.interfaces.media.Bookmark
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.MediaLibraryItem
-import org.videolan.resources.*
+import org.videolan.resources.AppContextProvider
+import org.videolan.resources.TAG_ITEM
 import org.videolan.resources.util.parcelable
-import org.videolan.tools.*
+import org.videolan.tools.AUDIO_HINGE_ON_RIGHT
+import org.videolan.tools.AUDIO_PLAY_PROGRESS_MODE
+import org.videolan.tools.KEY_AUDIO_SHOW_BOOKMARK_MARKERS
+import org.videolan.tools.KEY_AUDIO_SHOW_BOOkMARK_BUTTONS
+import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
+import org.videolan.tools.KEY_SHOW_TRACK_INFO
+import org.videolan.tools.PREF_PLAYLIST_TIPS_SHOWN
+import org.videolan.tools.PREF_RESTORE_VIDEO_TIPS_SHOWN
+import org.videolan.tools.RESTORE_BACKGROUND_VIDEO
+import org.videolan.tools.SHOW_REMAINING_TIME
+import org.videolan.tools.Settings
+import org.videolan.tools.copy
+import org.videolan.tools.dp
+import org.videolan.tools.formatRateString
+import org.videolan.tools.putSingle
+import org.videolan.tools.setGone
+import org.videolan.tools.setVisible
 import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
 import org.videolan.vlc.databinding.AudioPlayerBinding
@@ -79,8 +101,12 @@ import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_MEDIA
 import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_NEW_NAME
 import org.videolan.vlc.gui.dialogs.SleepTimerDialog
 import org.videolan.vlc.gui.dialogs.showContext
-import org.videolan.vlc.gui.helpers.*
 import org.videolan.vlc.gui.helpers.AudioUtil.setRingtone
+import org.videolan.vlc.gui.helpers.BookmarkListDelegate
+import org.videolan.vlc.gui.helpers.PlayerOptionsDelegate
+import org.videolan.vlc.gui.helpers.SwipeDragItemTouchHelperCallback
+import org.videolan.vlc.gui.helpers.TalkbackUtil
+import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylist
 import org.videolan.vlc.gui.helpers.UiTools.isTablet
 import org.videolan.vlc.gui.helpers.UiTools.showPinIfNeeded
@@ -91,7 +117,13 @@ import org.videolan.vlc.manageAbRepeatStep
 import org.videolan.vlc.media.PlaylistManager
 import org.videolan.vlc.media.PlaylistManager.Companion.hasMedia
 import org.videolan.vlc.util.ContextOption
-import org.videolan.vlc.util.ContextOption.*
+import org.videolan.vlc.util.ContextOption.CTX_ADD_TO_PLAYLIST
+import org.videolan.vlc.util.ContextOption.CTX_GO_TO_FOLDER
+import org.videolan.vlc.util.ContextOption.CTX_INFORMATION
+import org.videolan.vlc.util.ContextOption.CTX_REMOVE_FROM_PLAYLIST
+import org.videolan.vlc.util.ContextOption.CTX_SET_RINGTONE
+import org.videolan.vlc.util.ContextOption.CTX_SHARE
+import org.videolan.vlc.util.ContextOption.CTX_STOP_AFTER_THIS
 import org.videolan.vlc.util.FlagSet
 import org.videolan.vlc.util.TextUtils
 import org.videolan.vlc.util.launchWhenStarted
@@ -290,6 +322,12 @@ class AudioPlayer : Fragment(), PlaylistAdapter.IPlayer, TextWatcher, IAudioPlay
             val name = bundle.getString(RENAME_DIALOG_NEW_NAME) ?: return@setFragmentResultListener
             bookmarkListDelegate.renameBookmark(media as Bookmark, name)
         }
+
+        bookmarkModel.dataset.observe(requireActivity()) {
+            lifecycleScope.launch {
+                doUpdate()
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -422,6 +460,30 @@ class AudioPlayer : Fragment(), PlaylistAdapter.IPlayer, TextWatcher, IAudioPlay
             binding.nextChapter?.visibility = View.VISIBLE
             binding.previousChapter?.visibility = View.VISIBLE
         }
+
+        if (isShowingCover() && !bookmarkModel.dataset.isEmpty() && settings.getBoolean(KEY_AUDIO_SHOW_BOOkMARK_BUTTONS, true)) {
+            binding.audioForwardBookmark.setVisible()
+            binding.audioRewindBookmark.setVisible()
+        } else {
+            binding.audioForwardBookmark.setGone()
+            binding.audioRewindBookmark.setGone()
+        }
+        if (!::bookmarkListDelegate.isInitialized || !bookmarkListDelegate.visible) {
+            if (settings.getBoolean(KEY_AUDIO_SHOW_BOOKMARK_MARKERS, true))
+                bookmarkModel.service?.let { service ->
+                    binding.bookmarkMarkerContainer.setVisible()
+                    BookmarkListDelegate.showBookmarks(binding.bookmarkMarkerContainer, service, requireActivity(), bookmarkModel.dataset.getList())
+                }
+            else binding.bookmarkMarkerContainer.removeAllViews()
+            binding.audioForward10.setVisible()
+            binding.audioRewind10.setVisible()
+        } else {
+            binding.audioForwardBookmark.setGone()
+            binding.audioRewindBookmark.setGone()
+            binding.audioForward10.setGone()
+            binding.audioRewind10.setGone()
+        }
+
         binding.songTitle?.text = if (!chapter.isNullOrEmpty()) chapter else  playlistModel.title
         binding.songSubtitle?.text = if (!chapter.isNullOrEmpty()) TextUtils.separatedString(playlistModel.title, playlistModel.artist) else TextUtils.separatedString(playlistModel.artist, playlistModel.album)
         binding.songTitle?.isSelected = true
@@ -435,6 +497,7 @@ class AudioPlayer : Fragment(), PlaylistAdapter.IPlayer, TextWatcher, IAudioPlay
         binding.audioForward10.contentDescription = getString(R.string.talkback_action_forward, Settings.audioJumpDelay.toString())
         binding.audioRewind10.contentDescription = getString(R.string.talkback_action_rewind, Settings.audioJumpDelay.toString())
         updateBackground()
+
     }
 
     private var wasPlaying = true
@@ -620,6 +683,20 @@ class AudioPlayer : Fragment(), PlaylistAdapter.IPlayer, TextWatcher, IAudioPlay
         return true
     }
 
+    fun onPreviousBookmark(@Suppress("UNUSED_PARAMETER") view: View) {
+        val bookmark = bookmarkModel.findPrevious()
+        bookmark?.let {
+            bookmarkModel.service?.setTime(it.time)
+        }
+    }
+
+    fun onNextBookmark(@Suppress("UNUSED_PARAMETER") view: View) {
+        val bookmark = bookmarkModel.findNext()
+        bookmark?.let {
+            bookmarkModel.service?.setTime(it.time)
+        }
+    }
+
     /**
      * Jump backward or forward, with a long or small delay
      * depending on the audio control setting chosen by the user
@@ -634,7 +711,7 @@ class AudioPlayer : Fragment(), PlaylistAdapter.IPlayer, TextWatcher, IAudioPlay
             var position = service.getTime() + delay
             if (position < 0) position = 0
             if (position > service.length) position = service.length
-            service.seek(position, service.length.toDouble(), true)
+            service.seek(position, service.length.toDouble(), true, fast = false)
             service.playlistManager.player.updateProgress(position)
             if (service.playlistManager.player.lastPosition == 0.0f && (forward || service.getTime() > 0))
                 UiTools.snacker(requireActivity(), getString(R.string.unseekable_stream))
@@ -716,9 +793,15 @@ class AudioPlayer : Fragment(), PlaylistAdapter.IPlayer, TextWatcher, IAudioPlay
     fun showBookmarks() {
         val service = playlistModel.service ?: return
         if (!this::bookmarkListDelegate.isInitialized) {
-            bookmarkListDelegate = BookmarkListDelegate(requireActivity(), service, bookmarkModel)
+            bookmarkListDelegate = BookmarkListDelegate(requireActivity(), service, bookmarkModel, false)
             bookmarkListDelegate.visibilityListener = {
                 binding.audioPlayProgress.visibility = if (shouldHidePlayProgress()) View.GONE else View.VISIBLE
+                lifecycleScope.launch {
+                    doUpdate()
+                }
+            }
+            bookmarkListDelegate.seekListener = { forward, long ->
+                jump(forward , long)
             }
             bookmarkListDelegate.markerContainer = binding.bookmarkMarkerContainer
         }

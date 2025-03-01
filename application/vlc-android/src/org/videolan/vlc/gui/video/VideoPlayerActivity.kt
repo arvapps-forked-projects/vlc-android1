@@ -187,7 +187,6 @@ import org.videolan.vlc.gui.audio.EqualizerFragment
 import org.videolan.vlc.gui.audio.PlaylistAdapter
 import org.videolan.vlc.gui.browser.EXTRA_MRL
 import org.videolan.vlc.gui.dialogs.CONFIRM_BOOKMARK_RENAME_DIALOG_RESULT
-import org.videolan.vlc.gui.dialogs.CONFIRM_RENAME_DIALOG_RESULT
 import org.videolan.vlc.gui.dialogs.PlaybackSpeedDialog
 import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_MEDIA
 import org.videolan.vlc.gui.dialogs.RENAME_DIALOG_NEW_NAME
@@ -274,6 +273,12 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
 
     lateinit var windowLayoutInfo: WindowLayoutInfo
     private var currentConfirmationDialog: AlertDialog? = null
+    val resumeDialogObserver: (t: WaitConfirmation?) -> Unit = {
+        if (it != null)
+            showConfirmResumeDialog(it)
+        else
+            currentConfirmationDialog?.dismiss()
+    }
 
     /**
      * For uninterrupted switching between audio and video mode
@@ -1944,12 +1949,18 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         overlayDelegate.togglePlaylist()
     }
 
+    fun jump (forward:Boolean, long: Boolean) {
+        val jumpDelay = if (long) Settings.videoLongJumpDelay else Settings.videoJumpDelay
+        val delay = if (forward) jumpDelay * 1000 else -(jumpDelay * 1000)
+        touchDelegate.seekDelta(if (LocaleUtil.isRtl()) -delay  else delay)
+    }
+
     override fun onClick(v: View) {
         when (v.id) {
             R.id.orientation_toggle -> toggleOrientationLock()
             R.id.playlist_toggle -> overlayDelegate.togglePlaylist()
-            R.id.player_overlay_forward -> touchDelegate.seekDelta(if (LocaleUtil.isRtl()) -Settings.videoJumpDelay * 1000  else Settings.videoJumpDelay * 1000)
-            R.id.player_overlay_rewind -> touchDelegate.seekDelta(if (LocaleUtil.isRtl()) Settings.videoJumpDelay * 1000  else -Settings.videoJumpDelay * 1000)
+            R.id.player_overlay_forward -> jump(forward = true, long = false)
+            R.id.player_overlay_rewind -> jump(forward = false, long = false)
             R.id.ab_repeat_add_marker -> service?.playlistManager?.setABRepeatValue(
                 service?.playlistManager?.getCurrentMedia(), overlayDelegate.hudBinding.playerOverlaySeekbar.progress.toLong())
             R.id.ab_repeat_reset -> service?.playlistManager?.resetABRepeatValues(service?.playlistManager?.getCurrentMedia())
@@ -2009,11 +2020,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 return true
             }
             R.id.player_overlay_forward -> {
-                touchDelegate.seekDelta(if (LocaleUtil.isRtl()) -Settings.videoLongJumpDelay * 1000  else Settings.videoLongJumpDelay * 1000)
+                jump(forward = true, long = true)
                 return true
             }
             R.id.player_overlay_rewind -> {
-                touchDelegate.seekDelta(if (LocaleUtil.isRtl()) Settings.videoLongJumpDelay * 1000  else -Settings.videoLongJumpDelay * 1000)
+                jump(forward = false, long = true)
                 return true
             }
         }
@@ -2503,15 +2514,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 if (volSave > 100 && service.volume != volSave) service.setVolume(volSave)
             }
             service.addCallback(this)
-            service.playlistManager.waitForConfirmation.observe(this) {
-                if (it != null)
-                    showConfirmResumeDialog(it)
-                else
-                    currentConfirmationDialog?.dismiss()
-            }
+            service.playlistManager.waitForConfirmation.observe(this, resumeDialogObserver)
             //if (isTalkbackIsEnabled()) overlayDelegate.showOverlayTimeout(OVERLAY_INFINITE)
         } else if (this.service != null) {
             this.service?.removeCallback(this)
+            this.service?.playlistManager?.waitForConfirmation?.removeObserver(resumeDialogObserver)
             this.service = null
             handler.sendEmptyMessage(AUDIO_SERVICE_CONNECTION_FAILED)
             removeDownloadedSubtitlesObserver()

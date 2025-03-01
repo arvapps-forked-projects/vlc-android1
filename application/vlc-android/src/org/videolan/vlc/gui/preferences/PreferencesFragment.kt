@@ -57,8 +57,9 @@ import org.videolan.vlc.R
 import org.videolan.vlc.gui.PinCodeActivity
 import org.videolan.vlc.gui.PinCodeReason
 import org.videolan.vlc.gui.SecondaryActivity
-import org.videolan.vlc.gui.dialogs.CONFIRM_AUDIO_PLAY_QUEUE_DIALOG_RESULT
-import org.videolan.vlc.gui.dialogs.ConfirmAudioPlayQueueDialog
+import org.videolan.vlc.gui.dialogs.CONFIRM_PREFERENCE_CHANGE_DIALOG_RESULT
+import org.videolan.vlc.gui.dialogs.ConfirmPreferenceChangeDialog
+import org.videolan.vlc.gui.dialogs.PREFERENCE_KEY
 import org.videolan.vlc.gui.dialogs.PermissionListDialog
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.preferences.search.PreferenceItem
@@ -122,20 +123,25 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
             }
             arguments = null
         }
-        requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_AUDIO_PLAY_QUEUE_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
-            Settings.getInstance(requireActivity()).edit()
-                .remove(KEY_AUDIO_LAST_PLAYLIST)
-                .remove(KEY_MEDIA_LAST_PLAYLIST_RESUME)
-                .remove(KEY_CURRENT_AUDIO_RESUME_TITLE)
-                .remove(KEY_CURRENT_AUDIO_RESUME_ARTIST)
-                .remove(KEY_CURRENT_AUDIO_RESUME_THUMB)
-                .remove(KEY_CURRENT_AUDIO)
-                .remove(KEY_CURRENT_MEDIA)
-                .remove(KEY_CURRENT_MEDIA_RESUME)
-                .apply()
-            val activity = activity
-            activity?.setResult(RESULT_RESTART)
-            audioResumePref.isChecked = false
+        requireActivity().supportFragmentManager.setFragmentResultListener(CONFIRM_PREFERENCE_CHANGE_DIALOG_RESULT, viewLifecycleOwner) { requestKey, bundle ->
+            when (bundle.getString(PREFERENCE_KEY, "")) {
+                AUDIO_RESUME_PLAYBACK -> {
+                    Settings.getInstance(requireActivity()).edit()
+                        .remove(KEY_AUDIO_LAST_PLAYLIST)
+                        .remove(KEY_MEDIA_LAST_PLAYLIST_RESUME)
+                        .remove(KEY_CURRENT_AUDIO_RESUME_TITLE)
+                        .remove(KEY_CURRENT_AUDIO_RESUME_ARTIST)
+                        .remove(KEY_CURRENT_AUDIO_RESUME_THUMB)
+                        .remove(KEY_CURRENT_AUDIO)
+                        .remove(KEY_CURRENT_MEDIA)
+                        .remove(KEY_CURRENT_MEDIA_RESUME)
+                        .apply()
+                    val activity = activity
+                    activity?.setResult(RESULT_RESTART)
+                    audioResumePref.isChecked = false
+                }
+                PLAYBACK_HISTORY -> findPreference<CheckBoxPreference>(PLAYBACK_HISTORY)?.isChecked = false
+            }
         }
     }
 
@@ -176,12 +182,17 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
             PLAYBACK_HISTORY -> {
                 val activity = activity
                 activity?.setResult(RESULT_RESTART)
+                if (!(preference as CheckBoxPreference).isChecked) {
+                    val dialog = ConfirmPreferenceChangeDialog.newInstance(PLAYBACK_HISTORY,getString(R.string.playback_history_title),getString(R.string.playback_history_warning))
+                    dialog.show((activity as FragmentActivity).supportFragmentManager, ConfirmPreferenceChangeDialog::class.simpleName)
+                    preference.isChecked = true
+                }
                 return true
             }
             AUDIO_RESUME_PLAYBACK -> {
                 if (!audioResumePref.isChecked) {
-                    val dialog = ConfirmAudioPlayQueueDialog()
-                    dialog.show((activity as FragmentActivity).supportFragmentManager, ConfirmAudioPlayQueueDialog::class.simpleName)
+                    val dialog = ConfirmPreferenceChangeDialog.newInstance(AUDIO_RESUME_PLAYBACK,getString(R.string.audio_resume_playback_title),getString(R.string.audio_resume_playback_warning))
+                    dialog.show((activity as FragmentActivity).supportFragmentManager, ConfirmPreferenceChangeDialog::class.simpleName)
                     audioResumePref.isChecked = true
                 }
                 return true

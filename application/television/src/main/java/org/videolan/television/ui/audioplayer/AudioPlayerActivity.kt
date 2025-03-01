@@ -27,6 +27,7 @@ import android.os.Build
 import android.os.Bundle
 import android.support.v4.media.session.PlaybackStateCompat
 import android.text.format.DateFormat
+import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -34,14 +35,20 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
 import androidx.activity.OnBackPressedCallback
+import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.medialibrary.interfaces.media.Bookmark
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.medialibrary.media.MediaLibraryItem
@@ -51,10 +58,12 @@ import org.videolan.resources.util.parcelableList
 import org.videolan.television.R
 import org.videolan.television.databinding.TvAudioPlayerBinding
 import org.videolan.television.ui.browser.BaseTvActivity
+import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
 import org.videolan.tools.Settings
 import org.videolan.tools.formatRateString
 import org.videolan.tools.setGone
 import org.videolan.tools.setVisible
+import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.gui.audio.EqualizerFragment
 import org.videolan.vlc.gui.dialogs.CONFIRM_BOOKMARK_RENAME_DIALOG_RESULT
@@ -71,6 +80,7 @@ import org.videolan.vlc.gui.helpers.PlayerOptionsDelegate
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.showPinIfNeeded
 import org.videolan.vlc.media.MediaUtils
+import org.videolan.vlc.media.PlaylistManager
 import org.videolan.vlc.util.getScreenWidth
 import org.videolan.vlc.viewmodels.BookmarkModel
 import org.videolan.vlc.viewmodels.PlayerState
@@ -78,7 +88,7 @@ import org.videolan.vlc.viewmodels.PlaylistModel
 import kotlin.math.absoluteValue
 
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
-class AudioPlayerActivity : BaseTvActivity(),KeycodeListener  {
+class AudioPlayerActivity : BaseTvActivity(),KeycodeListener, PlaybackService.Callback  {
 
     private lateinit var binding: TvAudioPlayerBinding
     private lateinit var adapter: PlaylistAdapter
@@ -93,6 +103,8 @@ class AudioPlayerActivity : BaseTvActivity(),KeycodeListener  {
     lateinit var bookmarkModel: BookmarkModel
     private lateinit var bookmarkListDelegate: BookmarkListDelegate
     private val playerKeyListenerDelegate: PlayerKeyListenerDelegate by lazy(LazyThreadSafetyMode.NONE) { PlayerKeyListenerDelegate(this@AudioPlayerActivity) }
+    var playbackStarted = false
+    private var service: PlaybackService? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -162,11 +174,21 @@ class AudioPlayerActivity : BaseTvActivity(),KeycodeListener  {
             val name = bundle.getString(RENAME_DIALOG_NEW_NAME) ?: return@setFragmentResultListener
             bookmarkListDelegate.renameBookmark(media as Bookmark, name)
         }
+        PlaybackService.serviceFlow.onEach { onServiceChanged(it) }.launchIn(MainScope())
+        PlaylistManager.showAudioPlayer.observe(this) { showPlayer ->
+            if (!showPlayer && playbackStarted) finish()
+        }
+    }
+
+    private fun onServiceChanged(it: PlaybackService?) {
+        it?.addCallback(this)
+        service = it
     }
 
     override fun onDestroy() {
         super.onDestroy()
         optionsDelegate = null
+        service?.removeCallback(this)
     }
 
     private var timelineListener: SeekBar.OnSeekBarChangeListener = object : SeekBar.OnSeekBarChangeListener {
@@ -183,6 +205,11 @@ class AudioPlayerActivity : BaseTvActivity(),KeycodeListener  {
     }
 
     private fun showChips() {
+        if (settings?.getBoolean(KEY_PLAYBACK_SPEED_AUDIO_GLOBAL, false) == true) {
+            binding.playbackSpeedQuickActionImage.setImageDrawable(ContextCompat.getDrawable(this, org.videolan.vlc.R.drawable.ic_speed_all))
+        } else {
+            binding.playbackSpeedQuickActionImage.setImageDrawable(ContextCompat.getDrawable(this, org.videolan.vlc.R.drawable.ic_speed))
+        }
         binding.playbackSpeedQuickAction.setGone()
         binding.sleepQuickAction.setGone()
         model.speed.value?.let {
@@ -352,7 +379,7 @@ class AudioPlayerActivity : BaseTvActivity(),KeycodeListener  {
     private fun showBookmarks() {
         model.service?.let {
             if (!this::bookmarkListDelegate.isInitialized) {
-                bookmarkListDelegate = BookmarkListDelegate(this, it, bookmarkModel)
+                bookmarkListDelegate = BookmarkListDelegate(this, it, bookmarkModel, false)
                 bookmarkListDelegate.visibilityListener = {
                     if (bookmarkListDelegate.visible) bookmarkListDelegate.rootView.requestFocus()
                     binding.playlist.descendantFocusability = if (bookmarkListDelegate.visible) ViewGroup.FOCUS_BLOCK_DESCENDANTS else ViewGroup.FOCUS_AFTER_DESCENDANTS
@@ -360,9 +387,33 @@ class AudioPlayerActivity : BaseTvActivity(),KeycodeListener  {
                     binding.sleepQuickAction.isFocusable = !bookmarkListDelegate.visible
                     binding.playbackSpeedQuickAction.isFocusable = !bookmarkListDelegate.visible
                 }
+                bookmarkListDelegate.seekListener = { forward, long ->
+                    jump(forward, long)
+                }
                 bookmarkListDelegate.markerContainer = binding.bookmarkMarkerContainer
             }
             bookmarkListDelegate.show()
+        }
+    }
+
+    /**
+     * Jump backward or forward, with a long or small delay
+     * depending on the audio control setting chosen by the user
+     *
+     * @param forward is the jump forward?
+     * @param long has it been triggered by a long tap?
+     */
+    private fun jump(forward:Boolean, long:Boolean) {
+        model.service?.let { service ->
+            val jumpDelay = if (long) Settings.audioLongJumpDelay else Settings.audioJumpDelay
+            val delay = if (forward) jumpDelay * 1000 else -(jumpDelay * 1000)
+            var position = service.getTime() + delay
+            if (position < 0) position = 0
+            if (position > service.length) position = service.length
+            service.seek(position, service.length.toDouble(), true, fast = false)
+            service.playlistManager.player.updateProgress(position)
+            if (service.playlistManager.player.lastPosition == 0.0f && (forward || service.getTime() > 0))
+                UiTools.snacker(this, getString(org.videolan.vlc.R.string.unseekable_stream))
         }
     }
 
@@ -434,5 +485,17 @@ class AudioPlayerActivity : BaseTvActivity(),KeycodeListener  {
 
         //PAD navigation
         private const val JOYSTICK_INPUT_DELAY = 300
+    }
+
+    override fun update() { }
+
+    override fun onMediaEvent(event: IMedia.Event) { }
+
+    override fun onMediaPlayerEvent(event: MediaPlayer.Event) {
+        when (event.type) {
+            MediaPlayer.Event.Playing -> {
+                playbackStarted = true
+            }
+        }
     }
 }

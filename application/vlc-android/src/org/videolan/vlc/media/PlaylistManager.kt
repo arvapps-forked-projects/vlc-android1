@@ -509,16 +509,14 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             val start: Long
             if (isVideoPlaying) {
                 start = if (forceRestart
-                    || videoResumeStatus == ResumeStatus.NEVER
-                    || !Settings.getInstance(AppContextProvider.appContext).getBoolean(PLAYBACK_HISTORY, true)) 0L else getStartTime(mw)
+                    || videoResumeStatus == ResumeStatus.NEVER) 0L else getStartTime(mw)
                 if (!forceResume && videoResumeStatus == ResumeStatus.ASK && start > 0 && isAppStarted()) {
                     waitForConfirmation.postValue(WaitConfirmation(mw.title, index, flags))
                     return
                 }
             } else {
                 start = if (forceRestart
-                    || audioResumeStatus == ResumeStatus.NEVER
-                    || !Settings.getInstance(AppContextProvider.appContext).getBoolean(PLAYBACK_HISTORY, true)) 0L else getStartTime(mw)
+                    || audioResumeStatus == ResumeStatus.NEVER) 0L else getStartTime(mw)
                 if (!forceResume && audioResumeStatus == ResumeStatus.ASK && start > 0 && isAppStarted()) {
                     val confirmation = WaitConfirmation(mw.title, index, flags)
                     waitForConfirmationAudio.postValue(confirmation)
@@ -644,7 +642,6 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     fun saveMediaMeta(end:Boolean = false) = launch(start = CoroutineStart.UNDISPATCHED) outerLaunch@ {
-        if (!Settings.getInstance(AppContextProvider.appContext).getBoolean(PLAYBACK_HISTORY, true)) return@outerLaunch
         if (endReachedFor != null && endReachedFor == getCurrentMedia()?.uri.toString() && !end) return@outerLaunch
         val titleIdx = player.getTitleIdx()
         val currentMedia = getCurrentMedia() ?: return@outerLaunch
@@ -765,7 +762,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
 
     @Synchronized
     fun saveCurrentMedia(forceVideo:Boolean = false) {
-        if (settings.getBoolean(KEY_INCOGNITO, false) || !settings.getBoolean(PLAYBACK_HISTORY, true)) return
+        if (settings.getBoolean(KEY_INCOGNITO, false)) return
         val media = getCurrentMedia() ?: return
         val isAudio = isAudioList() || forceVideo
         if (media.uri.scheme.isSchemeFD()) {
@@ -797,7 +794,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     suspend fun saveMediaList(forceVideo:Boolean = false) {
-        if (settings.getBoolean(KEY_INCOGNITO, false) || !settings.getBoolean(PLAYBACK_HISTORY, true)) return
+        if (settings.getBoolean(KEY_INCOGNITO, false)) return
         val currentMedia = getCurrentMedia() ?: return
         if (currentMedia.uri.scheme.isSchemeFD()) return
         val locations = StringBuilder()
@@ -991,7 +988,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
 
     @Synchronized
     private fun savePosition(reset: Boolean = false, video: Boolean = false) {
-        if (settings.getBoolean(KEY_INCOGNITO, false) || !settings.getBoolean(PLAYBACK_HISTORY, true)) return
+        if (settings.getBoolean(KEY_INCOGNITO, false)) return
         if (!hasMedia()) return
         settings.edit {
             val audio = !video && isAudioList()
