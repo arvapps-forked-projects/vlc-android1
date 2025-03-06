@@ -58,6 +58,8 @@ import org.videolan.tools.HTTP_USER_AGENT
 import org.videolan.tools.KEY_AUDIO_CONFIRM_RESUME
 import org.videolan.tools.KEY_AUDIO_FORCE_SHUFFLE
 import org.videolan.tools.KEY_INCOGNITO
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
 import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
 import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
 import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL
@@ -742,13 +744,13 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
      * @param media
      */
     private fun restoreSpeed(media: MediaWrapper) {
+        val incognitoMode = settings.getBoolean(KEY_INCOGNITO, false)
+        val playbackSpeedModeAll = settings.getBoolean(if (player.isVideoPlaying()) KEY_PLAYBACK_SPEED_VIDEO_GLOBAL else KEY_PLAYBACK_SPEED_AUDIO_GLOBAL, false)
         val playbackRate = when {
+            incognitoMode && playbackSpeedModeAll -> settings.getFloat(if (player.isVideoPlaying()) KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE else KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE, 1.0f)
             //restore all
-            settings.getBoolean(
-                if (player.isVideoPlaying()) KEY_PLAYBACK_SPEED_VIDEO_GLOBAL else KEY_PLAYBACK_SPEED_AUDIO_GLOBAL,
-                false
-            ) -> settings.getFloat(if (player.isVideoPlaying()) KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE else KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE, 1.0f)
-            settings.getBoolean(KEY_INCOGNITO, false) -> 1F
+            playbackSpeedModeAll -> settings.getFloat(if (player.isVideoPlaying()) KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE else KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE, 1.0f)
+            incognitoMode -> 1F
             //restore one
             else -> try {
                 media.getMetaString(MediaWrapper.META_SPEED).toFloat()
