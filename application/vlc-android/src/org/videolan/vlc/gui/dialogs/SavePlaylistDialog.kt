@@ -30,8 +30,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.TextView
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,6 +66,7 @@ import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.showPinIfNeeded
 import org.videolan.vlc.providers.FileBrowserProvider
 import org.videolan.vlc.util.isSchemeStreaming
+import org.videolan.vlc.util.onAnyChange
 import org.videolan.vlc.viewmodels.browser.TYPE_FILE
 import org.videolan.vlc.viewmodels.browser.getBrowserModel
 import java.util.LinkedList
@@ -78,6 +82,8 @@ class SavePlaylistDialog : VLCBottomSheetDialogFragment(), View.OnClickListener,
     var nonDuplicateTracks: Array<MediaWrapper>? = null
     private lateinit var currentPlaylist: Playlist
     private lateinit var currentTracks: Array<MediaWrapper>
+    private var lastAddedPlaylist: MediaLibraryItem? = null
+    private var oldSelection: List<MediaLibraryItem>? = null
 
     private var isLoading: Boolean = false
         set(value) {
@@ -99,6 +105,7 @@ class SavePlaylistDialog : VLCBottomSheetDialogFragment(), View.OnClickListener,
 
     private val coroutineContextProvider: CoroutineContextProvider
     private val alreadyAdding = AtomicBoolean(false)
+    private lateinit var dataObserver: RecyclerView.AdapterDataObserver
 
     override fun initialFocusedView(): View = binding.dialogPlaylistName.editText ?: binding.dialogPlaylistName
 
@@ -112,9 +119,18 @@ class SavePlaylistDialog : VLCBottomSheetDialogFragment(), View.OnClickListener,
         lifecycleScope.launch { if (requireActivity().showPinIfNeeded()) dismiss() }
         medialibrary = Medialibrary.getInstance()
         adapter = SimpleAdapter(this)
+        dataObserver = adapter.onAnyChange {
+            updateEmptyView()
+            if (lastAddedPlaylist != null) {
+                val newSelection = ArrayList(oldSelection ?: listOf()).apply {
+                    add(lastAddedPlaylist)
+                }
+                lastAddedPlaylist = null
+                adapter.multiSelectHelper.replaceSelection(newSelection.map { adapter.currentList.indexOf(it) })
+            }
+        }
         adapter.defaultCover = UiTools.getDefaultPlaylistDrawable(requireActivity())
         newTracks = try {
-            @Suppress("UNCHECKED_CAST")
             val tracks = requireArguments().parcelableArray<MediaWrapper>(KEY_NEW_TRACKS) as Array<MediaWrapper>
             filesText = resources.getQuantityString(R.plurals.media_quantity, tracks.size, tracks.size)
             tracks
@@ -124,11 +140,13 @@ class SavePlaylistDialog : VLCBottomSheetDialogFragment(), View.OnClickListener,
 
                     isLoading = true
                     val viewModel = getBrowserModel(category = TYPE_FILE, url = folder)
-                    if (requireArguments().getBoolean(KEY_SUB_FOLDERS, false)) lifecycleScope.launchWhenStarted {
-                        withContext(Dispatchers.IO) {
-                            newTracks = (viewModel.provider as FileBrowserProvider).browseByUrl(folder).toTypedArray()
-                            isLoading = false
-                            filesText = resources.getQuantityString(R.plurals.media_quantity, newTracks.size, newTracks.size)
+                    if (requireArguments().getBoolean(KEY_SUB_FOLDERS, false)) lifecycleScope.launch(Dispatchers.Main) {
+                        viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                            withContext(Dispatchers.IO) {
+                                newTracks = (viewModel.provider as FileBrowserProvider).browseByUrl(folder).toTypedArray()
+                                isLoading = false
+                                filesText = resources.getQuantityString(R.plurals.media_quantity, newTracks.size, newTracks.size)
+                            }
                         }
                     } else {
                         viewModel.dataset.observe(this) { mediaLibraryItems ->
@@ -146,7 +164,12 @@ class SavePlaylistDialog : VLCBottomSheetDialogFragment(), View.OnClickListener,
         selectedPlaylist = savedInstanceState?.getSerializable(SELECTED_PLAYLIST) as ArrayList<Playlist>?
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+    override fun onDestroy() {
+        super.onDestroy()
+        if (::dataObserver.isInitialized) adapter.unregisterAdapterDataObserver(dataObserver)
+    }
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = DialogPlaylistBinding.inflate(layoutInflater, container, false)
         binding.isLoading = isLoading
         binding.filesText = filesText
@@ -263,9 +286,13 @@ class SavePlaylistDialog : VLCBottomSheetDialogFragment(), View.OnClickListener,
                 alreadyAdding.set(false)
                 return@launch
             }
-            medialibrary.createPlaylist(name, Settings.includeMissing, false)
+            val playlist = medialibrary.createPlaylist(name, Settings.includeMissing, false)
             binding.dialogPlaylistName.editText?.text?.clear()
-            adapter.submitList(listOf<MediaLibraryItem>(*medialibrary.getPlaylists(Playlist.Type.All, false).apply { forEach { it.description = resources.getQuantityString(R.plurals.media_quantity, it.tracksCount, it.tracksCount) } }))
+            oldSelection = adapter.multiSelectHelper.getSelection()
+            val newList = listOf<MediaLibraryItem>(
+                *medialibrary.getPlaylists(Playlist.Type.All, false).apply { forEach { it.description = resources.getQuantityString(R.plurals.media_quantity, it.tracksCount, it.tracksCount) } })
+            adapter.submitList(newList)
+            lastAddedPlaylist = playlist
             alreadyAdding.set(false)
             binding.dialogPlaylistName.error = null
 
@@ -357,7 +384,7 @@ class SavePlaylistDialog : VLCBottomSheetDialogFragment(), View.OnClickListener,
         }
     }
 
-    override fun onClick(item: MediaLibraryItem, position: Int) {
+    override fun onClick(position: Int) {
         adapter.multiSelectHelper.toggleSelection(position)
         binding.selectedPlaylistCount.text = resources.getString(R.string.selection_count, adapter.multiSelectHelper.getSelection().size)
     }
