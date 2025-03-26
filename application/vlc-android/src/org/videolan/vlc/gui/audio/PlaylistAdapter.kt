@@ -72,6 +72,7 @@ private const val ACTION_MOVED = "action_moved"
 class PlaylistAdapter(private val player: IPlayer) : DiffUtilAdapter<MediaWrapper, PlaylistAdapter.ViewHolder>(), SwipeDragHelperAdapter, SchedulerCallback {
 
     var showTrackNumbers: Boolean = false
+    var showReorderButtons: Boolean = true
     private var defaultCoverVideo: BitmapDrawable
     private var defaultCoverAudio: BitmapDrawable
     private var model: PlaylistModel? = null
@@ -156,8 +157,7 @@ class PlaylistAdapter(private val player: IPlayer) : DiffUtilAdapter<MediaWrappe
 
         val tablet = holder.binding.itemDelete.context.isTablet() || AndroidDevices.isTv
         if (tablet) holder.binding.itemDelete.setVisible() else holder.binding.itemDelete.setGone()
-        if (tablet) holder.binding.itemMoveDown.setVisible() else holder.binding.itemMoveDown.setGone()
-        if (tablet) holder.binding.itemMoveUp.setVisible() else holder.binding.itemMoveUp.setGone()
+        holder.binding.showReorderButtons = showReorderButtons && tablet
 
         holder.binding.executePendingBindings()
     }
@@ -203,18 +203,21 @@ class PlaylistAdapter(private val player: IPlayer) : DiffUtilAdapter<MediaWrappe
     }
 
     override fun onItemDismiss(position: Int) {
-        val media = getItem(position)
-        val message = String.format(AppContextProvider.appResources.getString(R.string.remove_playlist_item), media.title)
-        if (player is Fragment) {
-            UiTools.snackerWithCancel(player.requireActivity(), message, overAudioPlayer = true, action = {}) {
-                 model?.run { insertMedia(position, media) }
+        model?.let {
+            val media = getItem(position)
+            val message = String.format(AppContextProvider.appResources.getString(R.string.remove_playlist_item), media.title)
+            val originalPosition = it.getOriginalPosition(position)
+            if (player is Fragment) {
+                UiTools.snackerWithCancel(player.requireActivity(), message, overAudioPlayer = true, action = {}) {
+                    model?.run { insertMedia(originalPosition, media) }
+                }
+            } else if (player is Activity) {
+                UiTools.snackerWithCancel(player, message, action = {}) {
+                    model?.run { insertMedia(originalPosition, media) }
+                }
             }
-        } else if (player is Activity) {
-            UiTools.snackerWithCancel(player, message, action = {}) {
-                model?.run { insertMedia(position, media) }
-            }
+            remove(position)
         }
-        remove(position)
     }
 
     fun setModel(model: PlaylistModel) {
