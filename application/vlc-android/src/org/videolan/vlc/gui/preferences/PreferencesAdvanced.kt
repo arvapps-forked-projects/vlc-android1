@@ -43,6 +43,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.CheckBoxPreference
 import androidx.preference.EditTextPreference
+import androidx.preference.ListPreference
 import androidx.preference.Preference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,6 +65,7 @@ import org.videolan.resources.SCHEME_PACKAGE
 import org.videolan.resources.VLCInstance
 import org.videolan.tools.BitmapCache
 import org.videolan.tools.DAV1D_THREAD_NUMBER
+import org.videolan.tools.KEY_AOUT
 import org.videolan.tools.KEY_QUICK_PLAY
 import org.videolan.tools.KEY_QUICK_PLAY_DEFAULT
 import org.videolan.tools.RESULT_RESTART
@@ -71,6 +73,7 @@ import org.videolan.tools.Settings
 import org.videolan.tools.putSingle
 import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
+import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.gui.DebugLogActivity
 import org.videolan.vlc.gui.browser.EXTRA_MRL
 import org.videolan.vlc.gui.browser.FilePickerActivity
@@ -88,6 +91,7 @@ import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.hf.StoragePermissionsDelegate.Companion.getWritePermission
 import org.videolan.vlc.gui.helpers.restartMediaPlayer
 import org.videolan.vlc.gui.preferences.search.PreferenceParser
+import org.videolan.vlc.isVLC4
 import org.videolan.vlc.providers.PickerType
 import org.videolan.vlc.util.AutoUpdate
 import org.videolan.vlc.util.FeatureFlag
@@ -118,6 +122,17 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
             it.setSelection(it.editableText.length)
         }
         if (!BuildConfig.DEBUG) findPreference<Preference>("show_update")?.isVisible  = false
+
+        val aoutPref = findPreference<ListPreference>(KEY_AOUT)
+        val aout = VlcMigrationHelper.getAudioOutputFromDevice()
+        if (aout != VlcMigrationHelper.AudioOutput.ALL) {
+            /* no AudioOutput choice */
+            aoutPref?.isVisible = false
+        }
+        if (isVLC4() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            aoutPref?.entryValues = requireActivity().resources.getStringArray(R.array.aouts_complete_values)
+            aoutPref?.entries = requireActivity().resources.getStringArray(R.array.aouts_complete)
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -373,6 +388,12 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (sharedPreferences == null || key == null) return
         when (key) {
+            KEY_AOUT -> {
+                lifecycleScope.launch { restartLibVLC() }
+                Settings.getInstance(requireActivity()).let {
+                    if (it.getString(KEY_AOUT, "0") == "2") it.putSingle("audio_digital_output", false)
+                }
+            }
             "network_caching" -> {
                 sharedPreferences.edit {
                     try {

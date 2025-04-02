@@ -122,6 +122,7 @@ const val KEY_AUDIO_SHOW_TRACK_NUMBERS = "audio_show_track_numbers"
 const val KEY_AUDIO_SHOW_CHAPTER_BUTTONS = "audio_show_chapter_buttons"
 const val KEY_AUDIO_SHOW_BOOkMARK_BUTTONS = "audio_show_bookmark_buttons"
 const val KEY_AUDIO_SHOW_BOOKMARK_MARKERS = "audio_show_bookmark_markers"
+const val KEY_PERSISTENT_INCOGNITO = "persistent_incognito"
 
 
 // AudioPlayer
@@ -248,6 +249,7 @@ const val HTTP_USER_AGENT = "http_user_agent"
 const val DAV1D_THREAD_NUMBER = "dav1d_thread_number"
 const val KEY_QUICK_PLAY = "quick_play"
 const val KEY_QUICK_PLAY_DEFAULT = "quick_play_default"
+const val KEY_AOUT = "aout"
 
 //files
 const val BROWSER_SHOW_HIDDEN_FILES = "browser_show_hidden_files"
