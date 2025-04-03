@@ -71,9 +71,7 @@ import org.videolan.tools.KEY_QUICK_PLAY_DEFAULT
 import org.videolan.tools.RESULT_RESTART
 import org.videolan.tools.Settings
 import org.videolan.tools.putSingle
-import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.R
-import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.gui.DebugLogActivity
 import org.videolan.vlc.gui.browser.EXTRA_MRL
 import org.videolan.vlc.gui.browser.FilePickerActivity
@@ -94,7 +92,6 @@ import org.videolan.vlc.gui.preferences.search.PreferenceParser
 import org.videolan.vlc.isVLC4
 import org.videolan.vlc.providers.PickerType
 import org.videolan.vlc.util.AutoUpdate
-import org.videolan.vlc.util.FeatureFlag
 import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.util.share
 import java.io.File
@@ -114,21 +111,14 @@ class PreferencesAdvanced : BasePreferenceFragment(), SharedPreferences.OnShared
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (FeatureFlag.values().isNotEmpty()) findPreference<Preference>("optional_features")?.isVisible = true
 
         findPreference<EditTextPreference>("network_caching")?.setOnBindEditTextListener {
             it.inputType = InputType.TYPE_CLASS_NUMBER
             it.filters = arrayOf<InputFilter>(InputFilter.LengthFilter(5))
             it.setSelection(it.editableText.length)
         }
-        if (!BuildConfig.DEBUG) findPreference<Preference>("show_update")?.isVisible  = false
 
         val aoutPref = findPreference<ListPreference>(KEY_AOUT)
-        val aout = VlcMigrationHelper.getAudioOutputFromDevice()
-        if (aout != VlcMigrationHelper.AudioOutput.ALL) {
-            /* no AudioOutput choice */
-            aoutPref?.isVisible = false
-        }
         if (isVLC4() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             aoutPref?.entryValues = requireActivity().resources.getStringArray(R.array.aouts_complete_values)
             aoutPref?.entries = requireActivity().resources.getStringArray(R.array.aouts_complete)
