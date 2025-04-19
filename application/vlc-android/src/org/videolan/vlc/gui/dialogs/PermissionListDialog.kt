@@ -155,10 +155,6 @@ class PermissionListDialog : VLCBottomSheetDialogFragment() {
         binding.manageMediaVideo.isEnabled = !Permissions.hasAllAccess(requireActivity()) && !Permissions.hasVideoPermission(requireActivity())
         binding.manageMediaAudio.isEnabled = !Permissions.hasAllAccess(requireActivity()) && !Permissions.hasAudioPermission(requireActivity())
 
-        //backgrounds
-        binding.manageMediaPermsCheck.setBackgroundResource(defaultBackground)
-
-
         // explanation text state
         binding.fileAccessExplanation.text = when {
             Permissions.hasAllAccess(requireActivity()) -> getString(R.string.permission_onboarding_perm_all)
@@ -293,7 +289,7 @@ class PermissionListDialog : VLCBottomSheetDialogFragment() {
         }
 
         //Manage view visibility for older versions
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || AndroidDevices.isTv) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             binding.manageMediaPermsCheck.setGone()
             binding.manageMediaVideo.setGone()
             binding.manageMediaAudio.setGone()
@@ -305,7 +301,7 @@ class PermissionListDialog : VLCBottomSheetDialogFragment() {
             binding.manageMediaVideo.setGone()
         }
 
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2 || AndroidDevices.isTv) {
             binding.notificationPermissionContainer.setGone()
             binding.notificationPermissionTitle.setGone()
         }
