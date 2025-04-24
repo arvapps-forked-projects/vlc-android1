@@ -259,8 +259,8 @@ fi
 
 if [ ! -d "gradle/wrapper" ]; then
     diagnostic "Downloading gradle"
-    GRADLE_VERSION=8.7
-    GRADLE_SHA256=544c35d6bd849ae8a5ed0bcea39ba677dc40f49df7d1835561582da2009b961d
+    GRADLE_VERSION=8.13
+    GRADLE_SHA256=20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78
     GRADLE_URL=https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
     wget ${GRADLE_URL} 2>/dev/null || curl -O ${GRADLE_URL} || fail "gradle: download failed"
     echo $GRADLE_SHA256 gradle-${GRADLE_VERSION}-bin.zip | sha256sum -c || fail "gradle: hash mismatch"
@@ -280,9 +280,9 @@ fi
 
 
 if [ "$FORCE_VLC_4" = 1 ]; then
-    LIBVLCJNI_TESTED_HASH=44ca3af810d4fa315c916d7b0ebb8ecdb662d891
+    LIBVLCJNI_TESTED_HASH=306c523bfadfca021fc0758317f3f7f187f1052b
 else
-    LIBVLCJNI_TESTED_HASH=6ec2bf46d1a5d9938c5ab62fd7294f25e50c7e1a
+    LIBVLCJNI_TESTED_HASH=28b690d499711e7362eb61d03855e06e2854f396
 fi
 LIBVLCJNI_REPOSITORY=https://code.videolan.org/videolan/libvlcjni.git
 
