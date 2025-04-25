@@ -35,9 +35,21 @@ import androidx.preference.CheckBoxPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceScreen
 import org.videolan.medialibrary.interfaces.Medialibrary
-import org.videolan.resources.*
-import org.videolan.tools.*
+import org.videolan.resources.KEY_AUDIO_LAST_PLAYLIST
+import org.videolan.resources.KEY_CURRENT_AUDIO
+import org.videolan.resources.KEY_CURRENT_AUDIO_RESUME_ARTIST
+import org.videolan.resources.KEY_CURRENT_AUDIO_RESUME_THUMB
+import org.videolan.resources.KEY_CURRENT_AUDIO_RESUME_TITLE
+import org.videolan.resources.KEY_CURRENT_MEDIA
+import org.videolan.resources.KEY_CURRENT_MEDIA_RESUME
+import org.videolan.resources.KEY_MEDIA_LAST_PLAYLIST
+import org.videolan.resources.KEY_MEDIA_LAST_PLAYLIST_RESUME
+import org.videolan.tools.AUDIO_RESUME_PLAYBACK
+import org.videolan.tools.PLAYBACK_HISTORY
+import org.videolan.tools.RESULT_RESTART
+import org.videolan.tools.Settings
 import org.videolan.tools.Settings.isPinCodeSet
+import org.videolan.tools.VIDEO_RESUME_PLAYBACK
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.PinCodeActivity
 import org.videolan.vlc.gui.PinCodeReason
@@ -54,12 +66,12 @@ class PreferencesFragment : BasePreferenceFragment(), SharedPreferences.OnShared
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        findPreference<Preference>(SCREEN_ORIENTATION)?.isVisible = false
-        findPreference<Preference>("casting_category")?.isVisible = false
-        findPreference<Preference>("android_auto_category")?.isVisible = false
-        findPreference<Preference>(KEY_VIDEO_APP_SWITCH)?.isVisible = AndroidDevices.hasPiP
-        findPreference<Preference>("remote_access_category")?.isVisible = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
-        findPreference<Preference>("permissions_title")?.isVisible = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
+        (activity as? PreferencesActivity)?.extraEndPoint?.let {
+            if (it == "remote_access_category") findPreference<Preference>("remote_access_category")?.let {
+                onPreferenceTreeClick(it)
+                (activity as? PreferencesActivity)?.extraEndPoint = null
+            }
+        }
     }
 
     override fun onStart() {

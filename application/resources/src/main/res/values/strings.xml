@@ -330,6 +330,8 @@
     <string name="add_custom_path_description">Enter additional custom directory to scan:</string>
     <string name="remove_custom_path">Remove custom path</string>
     <string name="group_ban_folder">Ban folder from media library</string>
+    <string name="ban_folder">Ban folder</string>
+    <string name="ban_folder_explanation">Banning this folder means that you won\'t see its media in the video or audio section of the app, though they will still be accessible from the browser.\nTo unban it, go to the settings, %s and long tap this folder.</string>
 
     <string name="hardware_acceleration">Hardware Acceleration</string>
     <string name="hardware_acceleration_summary">Disabled: better stability\nDecoding: may improve performance\nFull: may improve performance further</string>
@@ -1304,6 +1306,7 @@
     <string name="ra_prepare_download">Preparing your download</string>
     <string name="ra_forbidden">Content disabled in the settings</string>
     <string name="ra_playback_forbidden">Playback control disabled in the settings</string>
+    <string name="ra_logs_forbidden">Logs sharing disabled in the settings</string>
     <string name="ra_code_requested_explanation">To protect your server, the access is protected.\nPlease enter the code displayed in your notifications</string>
     <string name="ra_ssl_explanation_title">Unsecure connection</string>
     <string name="ra_ssl_explanation">Your connection is not secure.</string>
@@ -1395,4 +1398,15 @@
     <string name="generating_logs">Generating logs. Please wait.</string>
     <string name="default_playback_action">Playback action</string>
     <string name="files">Files</string>
+    <string name="remote_access_feedback_generate">Generate report</string>
+    <string name="remote_access_feedback_generated">Your feedback report has been generated</string>
+    <string name="remote_access_feedback_generated_explanation">Tap the button below to send it using your default email client. If you encounter any issues, you can copy paste the fields below and send the email yourself.</string>
+    <string name="remote_access_feedback_file_explanation">You just downloaded the needed file. Please remember to attach it to your email.</string>
+    <string name="generic_copied_to_clipboard">Copied to clipboard</string>
+    <string name="feedback_email_warning">No email client installed</string>
+    <string name="feedback_email_warning_explanation">The easiest way to share your feedback is to use the %1$s feature.\nTo do so, enable the remote access in the settings, follow the instructions and choose the %2$s entry in the menu.</string>
+    <string name="feedback_email_warning_remote_action">Open the settings</string>
+    <string name="feedback_email_warning_try_anyway">Try anyway</string>
+    <string name="forum_url" translatable="false">https://forum.videolan.org/viewforum.php?f=35</string>
+    <string name="doc_url" translatable="false">https://docs.videolan.me/vlc-user/android/</string>
 </resources>

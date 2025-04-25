@@ -24,9 +24,11 @@
 
 package org.videolan.vlc.gui
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.MenuItem
+import androidx.core.net.toUri
 import androidx.core.widget.addTextChangedListener
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
@@ -43,7 +45,9 @@ import org.videolan.resources.AppContextProvider
 import org.videolan.resources.CRASH_HAPPENED
 import org.videolan.resources.CRASH_ML_CTX
 import org.videolan.resources.CRASH_ML_MSG
+import org.videolan.resources.TV_PREFERENCE_ACTIVITY
 import org.videolan.resources.util.applyOverscanMargin
+import org.videolan.tools.Settings
 import org.videolan.tools.isVisible
 import org.videolan.tools.setGone
 import org.videolan.tools.setVisible
@@ -53,6 +57,8 @@ import org.videolan.vlc.R
 import org.videolan.vlc.databinding.AboutFeedbackActivityBinding
 import org.videolan.vlc.gui.helpers.FeedbackUtil
 import org.videolan.vlc.gui.helpers.UiTools
+import org.videolan.vlc.gui.preferences.EXTRA_PREF_END_POINT
+import org.videolan.vlc.gui.preferences.PreferencesActivity
 import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.util.Permissions
 import org.videolan.vlc.util.TextUtils
@@ -170,26 +176,41 @@ class FeedbackActivity : BaseActivity(), DebugLogService.Client.Callback {
         binding.feedbackTypeEntry.addTextChangedListener {
             updateFormIncludesVisibility()
         }
+        binding.feedbackTypeEntry.setOnClickListener {
+            binding.feedbackTypeEntry.showDropDown()
+        }
         binding.feedbackTypeEntry.setText(feedbackTypeEntries[0], false)
-        binding.emailSupportCard.setOnClickListener {
-            if (binding.emailSupportForm.isVisible()) {
-                binding.emailSupportForm.setGone()
-                UiTools.setKeyboardVisibility(binding.messageTextInputLayout, false)
-                binding.emailSupportCard.nextFocusDownId = R.id.read_doc_card
-                binding.emailSupportCard.nextFocusRightId = R.id.read_doc_card
-            } else {
-                binding.emailSupportForm.setVisible()
-                binding.emailSupportCard.nextFocusDownId = R.id.feedback_type_entry
-                binding.emailSupportCard.nextFocusRightId = R.id.feedback_type_entry
-            }
-
+        binding.emailWarningExplanation.text = getString(R.string.feedback_email_warning_explanation, getString(R.string.remote_access), getString(R.string.send_feedback))
+        binding.tryAnyway.setOnClickListener {
+            binding.emailWarning.setGone()
+            switchFormVisibility()
             updateFormIncludesVisibility()
         }
+        binding.openSettings.setOnClickListener {
+            lifecycleScope.launch {
+                if (Settings.tvUI) {
+                    val intent = Intent(Intent.ACTION_VIEW).setClassName(this@FeedbackActivity, TV_PREFERENCE_ACTIVITY)
+                    intent.putExtra(EXTRA_PREF_END_POINT, "remote_access_category")
+                    startActivity(intent)
+                }
+                else
+                    PreferencesActivity.launchWithPref(this@FeedbackActivity, "enable_remote_access")
+            }
+        }
+        binding.emailSupportCard.setOnClickListener {
+            if (!isMailClientPresent()) {
+                switchNoEmailVisibility()
+            } else {
+                switchFormVisibility()
+                updateFormIncludesVisibility()
+            }
+
+        }
         binding.feedbackForumCard.setOnClickListener {
-            openLinkIfPossible("https://forum.videolan.org/viewforum.php?f=35")
+            openLinkIfPossible(getString(R.string.forum_url))
         }
         binding.readDocCard.setOnClickListener {
-            openLinkIfPossible("https://docs.videolan.me/vlc-user/android/")
+            openLinkIfPossible(getString(R.string.doc_url))
         }
         binding.emailSupportSend.setOnClickListener {
             if (binding.includeLogs.isChecked) {
@@ -226,16 +247,46 @@ class FeedbackActivity : BaseActivity(), DebugLogService.Client.Callback {
         }
     }
 
+    private fun switchFormVisibility(forceHide: Boolean = false) {
+        if (forceHide || binding.emailSupportForm.isVisible()) {
+            binding.emailSupportForm.setGone()
+            UiTools.setKeyboardVisibility(binding.messageTextInputLayout, false)
+            binding.emailSupportCard.nextFocusDownId = R.id.read_doc_card
+            binding.emailSupportCard.nextFocusRightId = R.id.read_doc_card
+        } else {
+            binding.emailSupportForm.setVisible()
+            binding.emailSupportCard.nextFocusDownId = R.id.feedback_type_entry
+            binding.emailSupportCard.nextFocusRightId = R.id.feedback_type_entry
+        }
+    }
+
+    private fun switchNoEmailVisibility() {
+        switchFormVisibility(true)
+        if (!binding.emailWarning.isVisible()) {
+            binding.emailWarning.setVisible()
+            binding.emailSupportCard.nextFocusDownId = R.id.open_settings
+            binding.emailSupportCard.nextFocusRightId = R.id.open_settings
+        } else {
+            binding.emailWarning.setGone()
+            binding.emailSupportCard.nextFocusDownId = R.id.read_doc_card
+            binding.emailSupportCard.nextFocusRightId = R.id.read_doc_card
+        }
+    }
+
+    fun isMailClientPresent(): Boolean {
+        val intent = Intent(Intent.ACTION_SENDTO, "mailto:".toUri())
+        val unsupportedActions = arrayOf("com.android.tv.frameworkpackagestubs", "com.google.android.tv.frameworkpackagestubs", "com.android.fallback")
+        val resolved = try {
+            intent.resolveActivity(packageManager)
+        } catch (e: Exception) {
+            return false
+        }
+        return resolved != null && resolved.packageName !in unsupportedActions
+    }
+
     private fun sendEmail(includeLogs: Boolean = false) {
         val feedbackTypePosition = feedbackTypeEntries.indexOf(binding.feedbackTypeEntry.text.toString())
         val isCrashFromML = !mlErrorContext.isNullOrEmpty() || !mlErrorMessage.isNullOrEmpty()
-        val subjectPrepend = when {
-            isCrashFromML -> "[ML Crash]"
-            feedbackTypePosition == 0 -> "[Help] "
-            feedbackTypePosition == 1 -> "[Feedback/Request] "
-            feedbackTypePosition == 2 -> "[Bug] "
-            else -> "[Crash] "
-        }
         val mail = if (BuildConfig.BETA && feedbackTypePosition > 2) FeedbackUtil.SupportType.CRASH_REPORT_EMAIL else FeedbackUtil.SupportType.SUPPORT_EMAIL
         lifecycleScope.launch {
             val message = if (isCrashFromML)
@@ -248,15 +299,19 @@ class FeedbackActivity : BaseActivity(), DebugLogService.Client.Callback {
                     append("ML Context: $mlErrorContext<br />ML error message: $mlErrorMessage")
                 }
             else binding.messageTextInputLayout.editText?.text.toString()
-            FeedbackUtil.sendEmail(
+            if (!FeedbackUtil.sendEmail(
                 this@FeedbackActivity,
                 mail,
                 binding.showIncludes && binding.includeMedialibrary.isChecked,
                 message,
-                subjectPrepend + binding.subjectTextInputLayout.editText?.text.toString(),
+                binding.subjectTextInputLayout.editText?.text.toString(),
+                if (isCrashFromML) 100 else feedbackTypePosition,
                 if (includeLogs) logcatZipPath else null
-            )
-            finish()
+            )) {
+                UiTools.snacker(this@FeedbackActivity, R.string.feedback_email_warning)
+                switchNoEmailVisibility()
+            } else
+                finish()
         }
     }
 

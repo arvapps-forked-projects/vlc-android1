@@ -269,6 +269,11 @@ class MainTvFragment : BrowseSupportFragment(), OnItemViewSelectedListener, OnIt
         registerDatasets()
     }
 
+    override fun onResume() {
+        super.onResume()
+        badgeDrawable = ContextCompat.getDrawable(requireContext(), if (Settings.incognitoMode) R.drawable.ic_incognito else R.drawable.icon)
+    }
+
     private fun manageDonationVisibility(donateCard: GenericCardItem) {
         if (activity == null) return
         otherAdapter.remove(donateCard)
@@ -283,6 +288,7 @@ class MainTvFragment : BrowseSupportFragment(), OnItemViewSelectedListener, OnIt
         model.favoritesList.observe(requireActivity()) {
             displayFavorites = it.isNotEmpty()
             favoritesAdapter.setItems(it, diffCallback)
+            resetLines()
         }
         model.audioCategories.observe(requireActivity()) {
             categoriesAdapter.setItems(it.toList(), diffCallback)

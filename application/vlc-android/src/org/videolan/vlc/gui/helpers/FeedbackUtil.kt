@@ -53,9 +53,11 @@ object FeedbackUtil {
      * @param includeMedialibrary Whether to include the medialibrary database or not
      * @param message Message to send
      * @param subject Subject of the email
+     * @param feedbackType Type of feedback
      * @param logcatZipPath Path to the logcat zip file
+     * @return true if the email was sent, false otherwise
      */
-    suspend fun sendEmail(activity: FragmentActivity, supportType: SupportType, includeMedialibrary: Boolean, message: String, subject: String, logcatZipPath: String? = null) {
+    suspend fun sendEmail(activity: FragmentActivity, supportType: SupportType, includeMedialibrary: Boolean, message: String, subject: String, feedbackType: Int, logcatZipPath: String? = null): Boolean {
         val emailIntent = withContext(Dispatchers.IO) {
 
             val emailIntent = Intent(Intent.ACTION_SEND_MULTIPLE)
@@ -87,12 +89,28 @@ object FeedbackUtil {
 
             val htmlBody = HtmlCompat.fromHtml(body, HtmlCompat.FROM_HTML_MODE_LEGACY)
             emailIntent.putExtra(Intent.EXTRA_EMAIL, arrayOf(supportType.email))
-            emailIntent.putExtra(Intent.EXTRA_SUBJECT, subject)
+            emailIntent.putExtra(Intent.EXTRA_SUBJECT, generateSubject(subject, feedbackType))
             emailIntent.putExtra(Intent.EXTRA_TEXT, htmlBody)
             emailIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             emailIntent
         }
-        emailIntent?.let { activity.startActivity(it) }
+        try {
+            emailIntent?.let { activity.startActivity(it) }
+            return true
+        } catch (_: Exception) {
+            return false
+        }
+    }
+
+    fun generateSubject(initialSubject: String, feedbackType: Int): String {
+        val subjectPrepend = when (feedbackType) {
+            0 -> "[Help] "
+            1 -> "[Feedback/Request] "
+            2 -> "[Bug] "
+            3 -> "[Crash] "
+            else -> "[ML Crash]"
+        }
+        return subjectPrepend + initialSubject
     }
 
     fun generateUsefulInfo(context: Context) = buildString {
