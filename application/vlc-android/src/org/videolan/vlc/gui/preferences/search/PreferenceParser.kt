@@ -34,19 +34,37 @@ import android.os.Parcelable
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.XmlRes
+import androidx.fragment.app.FragmentActivity
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
+import org.videolan.tools.AUDIO_DELAY_GLOBAL
+import org.videolan.tools.AUDIO_PLAY_PROGRESS_MODE
 import org.videolan.tools.CloseableUtils
+import org.videolan.tools.DISPLAY_UNDER_NOTCH
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
+import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
+import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
+import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL
+import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.KEY_SHOW_WHATS_NEW
+import org.videolan.tools.PREF_RESTORE_VIDEO_TIPS_SHOWN
+import org.videolan.tools.PREF_SHOW_VIDEO_SETTINGS_DISCLAIMER
+import org.videolan.tools.PREF_TIPS_SHOWN
+import org.videolan.tools.PREF_WIDGETS_TIPS_SHOWN
+import org.videolan.tools.SCREEN_ORIENTATION
 import org.videolan.tools.Settings
 import org.videolan.tools.putSingle
 import org.videolan.tools.wrap
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.helpers.DefaultPlaybackAction
 import org.videolan.vlc.gui.helpers.DefaultPlaybackActionMediaType
+import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.util.FileUtils
+import org.videolan.vlc.util.share
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileNotFoundException
@@ -55,6 +73,29 @@ import java.io.IOException
 import java.io.OutputStreamWriter
 
 object PreferenceParser {
+
+    // Other settings that should be backed up and restored
+    val additionalSettings = arrayOf(
+        KEY_SHOW_WHATS_NEW,
+        AUDIO_DELAY_GLOBAL,
+        AUDIO_PLAY_PROGRESS_MODE,
+        KEY_PLAYBACK_SPEED_VIDEO_GLOBAL,
+        KEY_PLAYBACK_SPEED_AUDIO_GLOBAL,
+        KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE,
+        KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE,
+        KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE,
+        KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE,
+        SCREEN_ORIENTATION,
+        PREF_TIPS_SHOWN,
+        PREF_WIDGETS_TIPS_SHOWN,
+        PREF_RESTORE_VIDEO_TIPS_SHOWN,
+        PREF_SHOW_VIDEO_SETTINGS_DISCLAIMER,
+        DISPLAY_UNDER_NOTCH,
+        "equalizer_enabled",
+        "equalizer_set",
+        "equalizer_values",
+        "equalizer_saved"
+        )
 
     /**
      * Parses all the preferences available in the app.
@@ -206,15 +247,31 @@ object PreferenceParser {
     private fun getChangedPrefsJson(context: Context) = buildString {
         append("{")
         val allChangedPrefs = getAllChangedPrefs(context)
+        addAllOtherPrefs(context, allChangedPrefs)
         for (allChangedPref in allChangedPrefs) {
             when {
-                allChangedPref.second is Boolean || allChangedPref.second is Int || allChangedPref.second is Long -> append("\"${allChangedPref.first}\": ${allChangedPref.second}")
+                allChangedPref.second is Float || allChangedPref.second is Boolean || allChangedPref.second is Int || allChangedPref.second is Long -> append("\"${allChangedPref.first}\": ${allChangedPref.second}")
                 else -> append("\"${allChangedPref.first}\": \"${allChangedPref.second}\"")
             }
             if (allChangedPref != allChangedPrefs.last()) append(", ")
 
         }
         append("}")
+    }
+
+    private fun addAllOtherPrefs(context: Context, pairs: ArrayList<Pair<String, Any>>) {
+        for ((key, value) in Settings.getInstance(context).all) {
+            if (key.startsWith("custom_equalizer_")) {
+                value?.let {
+                    pairs.add(Pair(key, it))
+                }
+            }
+            if (key in additionalSettings) {
+                value?.let {
+                    pairs.add(Pair(key, it))
+                }
+            }
+        }
     }
 
     /**
@@ -325,7 +382,11 @@ object PreferenceParser {
         }
         withContext(Dispatchers.Main) {
             if (success)
-                Toast.makeText(activity, R.string.export_settings_success, Toast.LENGTH_LONG).show()
+                if (activity is FragmentActivity)
+                    UiTools.snackerConfirm(activity, activity.getString(R.string.export_settings_success), confirmMessage = R.string.share, overAudioPlayer = false) {
+                        activity.share(dst)
+                    }
+                else Toast.makeText(activity, R.string.export_settings_success, Toast.LENGTH_LONG).show()
             else
                 Toast.makeText(activity, R.string.export_settings_failure, Toast.LENGTH_LONG).show()
         }
@@ -355,6 +416,21 @@ object PreferenceParser {
                     if (it.key == entry.key  && it.key != "custom_libvlc_options") {
                         Log.i("PrefParser", "Restored: ${entry.key} -> ${entry.value}")
                         newPrefs.putSingle(entry.key, if (entry.value is Double) (entry.value as Double).toInt() else entry.value)
+                    }
+                }
+            }
+            //restore other settings
+            savedSettings?.forEach {
+                if (it.key.startsWith("custom_equalizer_")) {
+                    newPrefs.putSingle(it.key, it.value)
+                }
+            }
+
+            savedSettings?.forEach { saved ->
+                additionalSettings.forEach {
+                    if (it == saved.key) {
+                        val value = if (saved.value is Double) (saved.value as Double).toFloat() else saved.value
+                        newPrefs.putSingle(it, value)
                     }
                 }
             }
