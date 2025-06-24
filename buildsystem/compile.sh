@@ -32,6 +32,7 @@ while [ $# -gt 0 ]; do
             echo "  X86:     x86, x86_64"
             echo "Use --release to build in release mode"
             echo "Use --signrelease to build in release mode and sign apk, see vlc-android/build.gradle"
+            echo "Use --reset to reset code from git"
             echo "Use -s to set your keystore file and -p for the password"
             echo "Use -c to get a ChromeOS build"
             echo "Use -l to build only LibVLC"
@@ -121,17 +122,17 @@ fi
 if [ -z "$ANDROID_ABI" ]; then
    diagnostic "*** No ANDROID_ABI defined architecture: using arm64-v8a"
    ANDROID_ABI="arm64-v8a"
-   ARCH="arm64"
-   TRIPLET="aarch64-linux-android"
+elif [ "$ANDROID_ABI" = "arm64" ]; then
+    ANDROID_ABI="arm64-v8a"
+elif [ "$ANDROID_ABI" = "arm" ]; then
+    ANDROID_ABI="armeabi-v7a"
 fi
 
-if [ "$ANDROID_ABI" = "armeabi-v7a" ] || [ "$ANDROID_ABI" = "arm" ]; then
-    ANDROID_ABI="armeabi-v7a"
+if [ "$ANDROID_ABI" = "armeabi-v7a" ]; then
     GRADLE_ABI="ARMv7"
     ARCH="arm"
     TRIPLET="arm-linux-androideabi"
-elif [ "$ANDROID_ABI" = "arm64-v8a" ] || [ "$ANDROID_ABI" = "arm64" ]; then
-    ANDROID_ABI="arm64-v8a"
+elif [ "$ANDROID_ABI" = "arm64-v8a" ]; then
     GRADLE_ABI="ARMv8"
     ARCH="arm64"
     TRIPLET="aarch64-linux-android"
@@ -333,7 +334,7 @@ fi
 diagnostic "Configuring"
 
 # Build LibVLC if asked for it, or needed by medialibrary
-OUT_DBG_DIR=.dbg/${ANDROID_ABI}
+OUT_DBG_DIR="$(pwd -P)/.dbg/${ANDROID_ABI}"
 mkdir -p $OUT_DBG_DIR
 
 if [ "$BUILD_MEDIALIB" != 1 ] || [ ! -d "${VLC_LIBJNI_PATH}/libvlc/jni/libs/" ]; then
@@ -348,12 +349,19 @@ if [ "$BUILD_MEDIALIB" != 1 ] || [ ! -d "${VLC_LIBJNI_PATH}/libvlc/jni/libs/" ];
     fi
     ${VLC_LIBJNI_PATH}/buildsystem/compile-libvlc.sh -a ${ARCH} ${CONTRIB_FLAGS}
 
-    cp -a ${VLC_LIBJNI_PATH}/libvlc/jni/obj/local/${ANDROID_ABI}/*.so ${OUT_DBG_DIR}
+    cp -a ${VLC_LIBJNI_PATH}/libvlc/jni/obj/local/${ANDROID_ABI}/*.so "${OUT_DBG_DIR}"
 fi
 
 if [ "$NO_ML" != 1 ]; then
-    ANDROID_ABI=$ANDROID_ABI RELEASE=$RELEASE RESET=$RESET buildsystem/compile-medialibrary.sh
-    cp -a medialibrary/jni/obj/local/${ANDROID_ABI}/*.so ${OUT_DBG_DIR}
+    medialig_args="-a $ANDROID_ABI"
+    if [ "$RELEASE" = 1 ]; then
+        medialig_args="$medialig_args --release"
+    fi
+    if [ "$RESET" = 1 ]; then
+        medialig_args="$medialig_args --reset"
+    fi
+    buildsystem/compile-medialibrary.sh ${medialig_args}
+    cp -a medialibrary/jni/obj/local/${ANDROID_ABI}/*.so "${OUT_DBG_DIR}"
 fi
 
 ##################
@@ -403,7 +411,7 @@ else
     fi
 fi
 
-if [ ! -d "./remoteaccess/dist" ] ; then
+if [ ! -d "./application/remote-access-client/remoteaccess/dist" ] ; then
     echo "\033[1;32mWARNING: This was built without the remote access at ./remoteaccess/dist ..."
 fi
 
