@@ -31,6 +31,7 @@ while [ $# -gt 0 ]; do
 done
 
 SRC_DIR=$PWD
+# gets TARGET_TUPLE / ANDROID_API / CLANG_PREFIX / CROSS_CLANG / VLC_CFLAGS / VLC_CXXFLAGS / NDK_DEBUG / MAKEFLAGS / LIBVLCJNI_SRC_DIR
 AVLC_SOURCED=1 . libvlcjni/buildsystem/compile-libvlc.sh
 
 ################
@@ -40,6 +41,8 @@ AVLC_SOURCED=1 . libvlcjni/buildsystem/compile-libvlc.sh
 if [ ! -d "${SRC_DIR}/medialibrary" ]; then
   mkdir "${SRC_DIR}/medialibrary"
 fi
+
+MEDIALIBRARY_PREFIX="${SRC_DIR}/medialibrary/prefix/android-${ANDROID_API}-${ANDROID_ABI}"
 
 ##########
 # SQLITE #
@@ -57,13 +60,12 @@ if [ ! -d "${MEDIALIBRARY_MODULE_DIR}/${SQLITE_RELEASE}" ]; then
   rm -rf ${MEDIALIBRARY_MODULE_DIR}/jni/libs
   rm -rf ${MEDIALIBRARY_MODULE_DIR}/jni/obj
   wget https://download.videolan.org/pub/contrib/sqlite/${SQLITE_RELEASE}.tar.gz
-    if [ ! "$(sha512sum ${SQLITE_RELEASE}.tar.gz)" = "${SQLITE_SHA512SUM}  ${SQLITE_RELEASE}.tar.gz" ]; then
+  if [ ! "$(sha512sum ${SQLITE_RELEASE}.tar.gz)" = "${SQLITE_SHA512SUM}  ${SQLITE_RELEASE}.tar.gz" ]; then
     echo "Wrong sha1 for ${SQLITE_RELEASE}.tar.gz"
     exit 1
   fi
   tar -xozf ${SQLITE_RELEASE}.tar.gz
   rm -f ${SQLITE_RELEASE}.tar.gz
-  cd ${SQLITE_RELEASE}
 fi
 cd ${MEDIALIBRARY_MODULE_DIR}/${SQLITE_RELEASE}
 if [ ! -d "build-$ANDROID_ABI" ]; then
@@ -71,15 +73,13 @@ if [ ! -d "build-$ANDROID_ABI" ]; then
 fi;
 cd "build-$ANDROID_ABI";
 
-if [ ! -e ./config.status -o "$RELEASE" = "1" ]; then
+if [ ! -e ./config.status ] || [ "$RELEASE" = "1" ] || [ ! -e "${MEDIALIBRARY_PREFIX}/lib/libsqlite3.a" ]; then
   ../configure \
     --host=$TARGET_TUPLE \
-    --prefix=${SRC_DIR}/medialibrary/prefix/${TARGET_TUPLE} \
-    --disable-shell \
+    --prefix="${MEDIALIBRARY_PREFIX}" \
     --disable-shared \
     CFLAGS="${VLC_CFLAGS}" \
     CXXFLAGS="${VLC_CFLAGS} ${VLC_CXXFLAGS}" \
-    LDFLAGS="-Wl,-z,max-page-size=16384" \
     CC="${CROSS_CLANG}" \
     CXX="${CROSS_CLANG}++"
 fi
@@ -145,16 +145,50 @@ if [ "$RELEASE" = "1" ]; then
         avlc_checkfail "Release builds must use tags"
 fi
 
-if [ ! -d "build-android-$ANDROID_ABI/" -o ! -f "build-android-$ANDROID_ABI/build.ninja" ]; then
+if [ "$ANDROID_ABI" = "armeabi-v7a" ]; then
+    MESON_CPU="arm"
+elif [ "$ANDROID_ABI" = "arm64-v8a" ]; then
+    MESON_CPU="aarch64"
+elif [ "$ANDROID_ABI" = "x86" ]; then
+    MESON_CPU="i686"
+elif [ "$ANDROID_ABI" = "x86_64" ]; then
+    MESON_CPU="x86_64"
+else
+    diagnostic "Invalid arch specified: '$ANDROID_ABI'."
+    diagnostic "Try --help for more information"
+    exit 1
+fi
+
+echo "generate meson ${ANDROID_ABI}-${ANDROID_API} crossfile"
+exec 3>crossfile-${ANDROID_ABI}-android-${ANDROID_API}.meson || return $?
+
+printf '[binaries]\n' >&3
+printf 'c = '"'"'%s'"'"'\n' "${CLANG_PREFIX}${ANDROID_API}-clang" >&3
+printf 'cpp = '"'"'%s'"'"'\n' "${CLANG_PREFIX}${ANDROID_API}-clang++" >&3
+printf 'ar = '"'"'llvm-ar'"'"'\n' >&3
+printf 'strip = '"'"'llvm-strip'"'"'\n' >&3
+printf 'pkgconfig = '"'"'pkg-config'"'"'\n' >&3
+
+printf '\n[host_machine]\n' >&3
+printf 'system = '"'"'android'"'"'\n' >&3
+printf 'endian = '"'"'little'"'"'\n' >&3
+if [ "${MESON_CPU}" = "i686" ]; then
+    printf 'cpu_family = '"'"'%s'"'"'\n' "x86" >&3
+else
+    printf 'cpu_family = '"'"'%s'"'"'\n' "${MESON_CPU}" >&3
+fi
+printf 'cpu = '"'"'%s'"'"'\n' "${MESON_CPU}" >&3
+
+if [ ! -d "build-android-$ANDROID_ABI/" ] || [ ! -f "build-android-$ANDROID_ABI/build.ninja" ]; then
     PKG_CONFIG_LIBDIR="$LIBVLCJNI_SRC_DIR/vlc/build-android-${TARGET_TUPLE}/install/lib/pkgconfig" \
-    PKG_CONFIG_PATH="$SRC_DIR/medialibrary/prefix/${TARGET_TUPLE}/lib/pkgconfig:$LIBVLCJNI_SRC_DIR/vlc/contrib/$TARGET_TUPLE/lib/pkgconfig/" \
-    LDFLAGS="-Wl,-z,max-page-size=16384" \
-    meson \
+    PKG_CONFIG_PATH="${MEDIALIBRARY_PREFIX}/lib/pkgconfig:$LIBVLCJNI_SRC_DIR/vlc/contrib/$TARGET_TUPLE/lib/pkgconfig/" \
+    meson setup \
         -Ddebug=true \
         -Doptimization=${MEDIALIBRARY_OPTIMIZATION} \
         -Db_ndebug=${MEDIALIBRARY_NDEBUG} \
         -Ddefault_library=static \
-        --cross-file ${SRC_DIR}/buildsystem/crossfiles/${ANDROID_ABI}-ndk${REL}.crossfile \
+        --prefix "${MEDIALIBRARY_PREFIX}" \
+        --cross-file crossfile-${ANDROID_ABI}-android-${ANDROID_API}.meson \
         -Dlibjpeg_prefix="$LIBVLCJNI_SRC_DIR/vlc/contrib/$TARGET_TUPLE/" \
         -Dtests=disabled \
         -Dforce_attachment_api=true \
@@ -169,8 +203,8 @@ avlc_checkfail "medialibrary: meson failed"
 ############
 
 echo -e "\e[1m\e[32mBuilding medialibrary\e[0m"
-cd "build-android-$ANDROID_ABI/";
-ninja
+meson compile -C "build-android-$ANDROID_ABI"
+meson install -C "build-android-$ANDROID_ABI"
 
 avlc_checkfail "medialibrary: build failed"
 
@@ -178,7 +212,7 @@ cd ${SRC_DIR}
 
 MEDIALIBRARY_LDLIBS="-L$LIBVLCJNI_SRC_DIR/libvlc/jni/libs/${ANDROID_ABI}/ -lvlc \
 -L$LIBVLCJNI_SRC_DIR/vlc/contrib/$TARGET_TUPLE/lib -ljpeg \
--L${NDK_LIB_DIR} -lc++abi"
+-lc++abi"
 
 $NDK_BUILD -C medialibrary \
   APP_STL="c++_shared" \
