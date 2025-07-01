@@ -248,26 +248,36 @@ if [ ! -d "$ANDROID_SDK/licenses" ]; then
     echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> "$ANDROID_SDK/licenses/android-sdk-license"
 fi
 
+if [ "$FORCE_VLC_4" = 1 ]; then
+    gradle_prop="-PforceVlc4=true"
+fi
+
 ##########
 # GRADLE #
 ##########
 
-if [ ! -d "gradle/wrapper" ]; then
-    diagnostic "Downloading gradle"
+if [ ! -e "./gradlew" ] || [ ! -x "./gradlew" ]; then
+    diagnostic "gradlew not found"
+    # the SHA256 is found in https://gradle.org/release-checksums/
     GRADLE_VERSION=8.13
     GRADLE_SHA256=20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78
     GRADLE_URL=https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
-    wget ${GRADLE_URL} 2>/dev/null || curl -O ${GRADLE_URL} || fail "gradle: download failed"
-    echo $GRADLE_SHA256 gradle-${GRADLE_VERSION}-bin.zip | sha256sum -c || fail "gradle: hash mismatch"
 
-    unzip -o gradle-${GRADLE_VERSION}-bin.zip || fail "gradle: unzip failed"
+    export PATH="$(pwd -P)/gradle-${GRADLE_VERSION}/bin:$PATH"
+    if [ ! $(command -v gradle) >/dev/null 2>&1 ]; then
+        diagnostic "gradle could not be found in PATH, downloading"
+        wget ${GRADLE_URL} 2>/dev/null || curl -O ${GRADLE_URL} || fail "gradle: download failed"
+        echo $GRADLE_SHA256 gradle-${GRADLE_VERSION}-bin.zip | sha256sum -c || fail "gradle: hash mismatch"
 
-    ./gradle-${GRADLE_VERSION}/bin/gradle wrapper || fail "gradle: wrapper failed"
+        unzip -o gradle-${GRADLE_VERSION}-bin.zip || fail "gradle: unzip failed"
+        rm -rf gradle-${GRADLE_VERSION}-bin.zip
+    fi
 
-    ./gradlew -version || fail "gradle: wrapper failed"
+    gradle wrapper --gradle-version ${GRADLE_VERSION} ${gradle_prop} || fail "gradle: wrapper failed"
+
     chmod a+x gradlew
-    rm -rf gradle-${GRADLE_VERSION}-bin.zip
 fi
+./gradlew -version || fail "gradle: wrapper failed"
 
 ####################
 # Fetch VLC source #
@@ -275,7 +285,7 @@ fi
 
 
 if [ "$FORCE_VLC_4" = 1 ]; then
-    LIBVLCJNI_TESTED_HASH=306c523bfadfca021fc0758317f3f7f187f1052b
+    LIBVLCJNI_TESTED_HASH=e90807431330d949b855b37695b9004af6b00bd9
 else
     LIBVLCJNI_TESTED_HASH=28b690d499711e7362eb61d03855e06e2854f396
 fi
@@ -377,9 +387,6 @@ else
 fi
 GRADLE_TASK="${ACTION}${BUILDTYPE}"
 
-if [ "$FORCE_VLC_4" = 1 ]; then
-    gradle_prop="-PforceVlc4=true"
-fi
 if [ -n "$M2_REPO" ]; then
     gradle_prop="$gradle_prop -Dmaven.repo.local=$M2_REPO"
 fi
