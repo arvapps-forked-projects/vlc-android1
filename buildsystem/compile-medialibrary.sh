@@ -59,7 +59,7 @@ if [ ! -d "${MEDIALIBRARY_MODULE_DIR}/${SQLITE_RELEASE}" ]; then
   rm -rf ${MEDIALIBRARY_BUILD_DIR}/build-android*
   rm -rf ${MEDIALIBRARY_MODULE_DIR}/jni/libs
   rm -rf ${MEDIALIBRARY_MODULE_DIR}/jni/obj
-  wget https://download.videolan.org/pub/contrib/sqlite/${SQLITE_RELEASE}.tar.gz
+  wget https://download.videolan.org/pub/contrib/sqlite/${SQLITE_RELEASE}.tar.gz 2>/dev/null || curl -L -O https://download.videolan.org/pub/contrib/sqlite/${SQLITE_RELEASE}.tar.gz
   if [ ! "$(sha512sum ${SQLITE_RELEASE}.tar.gz)" = "${SQLITE_SHA512SUM}  ${SQLITE_RELEASE}.tar.gz" ]; then
     echo "Wrong sha1 for ${SQLITE_RELEASE}.tar.gz"
     exit 1
@@ -168,6 +168,9 @@ printf 'cpp = '"'"'%s'"'"'\n' "${CLANG_PREFIX}${ANDROID_API}-clang++" >&3
 printf 'ar = '"'"'llvm-ar'"'"'\n' >&3
 printf 'strip = '"'"'llvm-strip'"'"'\n' >&3
 printf 'pkgconfig = '"'"'pkg-config'"'"'\n' >&3
+if [ $(command -v cmake) >/dev/null 2>&1 ]; then
+  printf 'cmake = '"'"'%s'"'"'\n' "$(command -v cmake)" >&3
+fi
 
 printf '\n[host_machine]\n' >&3
 printf 'system = '"'"'android'"'"'\n' >&3
@@ -180,6 +183,8 @@ fi
 printf 'cpu = '"'"'%s'"'"'\n' "${MESON_CPU}" >&3
 
 if [ ! -d "build-android-$ANDROID_ABI/" ] || [ ! -f "build-android-$ANDROID_ABI/build.ninja" ]; then
+    export PATH="$LIBVLCJNI_SRC_DIR/vlc/extras/tools/build/bin:$PATH"
+
     PKG_CONFIG_LIBDIR="$LIBVLCJNI_SRC_DIR/vlc/build-android-${TARGET_TUPLE}/install/lib/pkgconfig" \
     PKG_CONFIG_PATH="${MEDIALIBRARY_PREFIX}/lib/pkgconfig:$LIBVLCJNI_SRC_DIR/vlc/contrib/$TARGET_TUPLE/lib/pkgconfig/" \
     meson setup \

@@ -42,14 +42,14 @@ android {
 
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        compileSdk rootProject.ext.compileSdkVersion
+        compileSdk = rootProject.ext.compileSdkVersion
         buildToolsVersion rootProject.ext.buildToolsVersion
         vectorDrawables.useSupportLibrary = true
     }
 
     testOptions {
         animationsDisabled = true
-        execution 'ANDROIDX_TEST_ORCHESTRATOR'
+        execution = 'ANDROIDX_TEST_ORCHESTRATOR'
         unitTests {
             includeAndroidResources = true
         }
@@ -76,7 +76,7 @@ android {
             buildConfigField "String", "APP_ID", "\"${rootProject.ext.appId}.debug\""
             resValue 'string', 'tv_provider_authority', "${rootProject.ext.appId}.debug.tv"
             buildConfigField "boolean", "NO_TV", "false"
-            multiDexEnabled true
+            multiDexEnabled = true
         }
         vlcBundle {
             initWith release
@@ -118,11 +118,11 @@ android {
         assets.srcDirs = ['flavors/debug/assets']
         assets.srcDirs += files("$projectDir/assets/schemas".toString())
     }
-    namespace 'org.videolan.vlc'
+    namespace = 'org.videolan.vlc'
     buildFeatures {
-        renderScript true
-        aidl true
-        buildConfig true
+        renderScript = true
+        aidl = true
+        buildConfig = true
     }
 }
 

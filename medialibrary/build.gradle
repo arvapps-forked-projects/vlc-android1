@@ -28,7 +28,7 @@ ext {
     library_version = "$rootProject.ext.medialibraryVersion"
 }
 android {
-    namespace 'org.videolan.medialibrary'
+    namespace = 'org.videolan.medialibrary'
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -37,7 +37,7 @@ android {
     defaultConfig {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        compileSdk rootProject.ext.compileSdkVersion
+        compileSdk = rootProject.ext.compileSdkVersion
         buildToolsVersion rootProject.ext.buildToolsVersion
     }
 
@@ -76,8 +76,8 @@ android {
         enabled = true
     }
     buildFeatures {
-        renderScript true
-        aidl true
+        renderScript = true
+        aidl = true
     }
 
     // Make per-variant version code
