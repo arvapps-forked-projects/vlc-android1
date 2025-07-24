@@ -26,8 +26,10 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
@@ -35,20 +37,28 @@ import android.view.View
 import android.widget.ImageView
 import androidx.appcompat.view.ActionMode
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.videolan.libvlc.util.AndroidUtil
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.ACTIVITY_RESULT_OPEN
 import org.videolan.resources.ACTIVITY_RESULT_PREFERENCES
 import org.videolan.resources.ACTIVITY_RESULT_SECONDARY
+import org.videolan.resources.AndroidDevices
 import org.videolan.resources.CRASH_HAPPENED
+import org.videolan.resources.EXPORT_SETTINGS_FILE
 import org.videolan.resources.EXTRA_TARGET
 import org.videolan.tools.KEY_INCOGNITO
 import org.videolan.tools.KEY_LAST_SESSION_CRASHED
 import org.videolan.tools.KEY_MEDIALIBRARY_AUTO_RESCAN
+import org.videolan.tools.KEY_METERED_CONNECTION
+import org.videolan.tools.KEY_OBSOLETE_RESTORE_FILE_WARNED
 import org.videolan.tools.KEY_SHOW_UPDATE
 import org.videolan.tools.PERMISSION_NEVER_ASK
 import org.videolan.tools.PERMISSION_NEXT_ASK
@@ -64,6 +74,7 @@ import org.videolan.vlc.R
 import org.videolan.vlc.StartActivity
 import org.videolan.vlc.gui.audio.AudioBrowserFragment
 import org.videolan.vlc.gui.browser.BaseBrowserFragment
+import org.videolan.vlc.gui.browser.EXTRA_MRL
 import org.videolan.vlc.gui.dialogs.NotificationPermissionManager
 import org.videolan.vlc.gui.dialogs.PermissionListDialog
 import org.videolan.vlc.gui.dialogs.UPDATE_DATE
@@ -73,6 +84,8 @@ import org.videolan.vlc.gui.helpers.INavigator
 import org.videolan.vlc.gui.helpers.Navigator
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.isTablet
+import org.videolan.vlc.gui.preferences.PreferencesActivity
+import org.videolan.vlc.gui.preferences.search.PreferenceParser
 import org.videolan.vlc.gui.video.VideoGridFragment
 import org.videolan.vlc.interfaces.Filterable
 import org.videolan.vlc.interfaces.IRefreshable
@@ -84,6 +97,7 @@ import org.videolan.vlc.util.Util
 import org.videolan.vlc.util.WhatsNewManager
 import org.videolan.vlc.util.WidgetMigration
 import org.videolan.vlc.util.getScreenWidth
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "VLC/MainActivity"
@@ -171,7 +185,26 @@ class MainActivity : ContentActivity(),
 
             }
         }
-
+        if (!settings.getBoolean(KEY_OBSOLETE_RESTORE_FILE_WARNED, false)) {
+            lifecycleScope.launch {
+                val file = File(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY + EXPORT_SETTINGS_FILE)
+                val fileExists = withContext(Dispatchers.IO) {
+                    file.exists()
+                }
+                if (!fileExists) return@launch
+                //check if file is restorable
+                try {
+                    PreferenceParser.checkRestoreFile(file.path.toUri())
+                } catch (_: Exception) {
+                    UiTools.snackerConfirm(this@MainActivity, getString(R.string.obsolete_restore_settings), confirmMessage = R.string.ok, indefinite = true) {
+                        lifecycleScope.launch {
+                            PreferencesActivity.launchWithPref(this@MainActivity, "export_settings")
+                        }
+                    }
+                }
+            }
+        }
+        settings.putSingle(KEY_OBSOLETE_RESTORE_FILE_WARNED, true)
     }
 
     override fun onResume() {

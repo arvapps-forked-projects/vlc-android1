@@ -43,6 +43,7 @@ import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
 import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
 import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL
 import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.KEY_SUBTITLES_COLOR
 import org.videolan.tools.KEY_VIDEO_CONFIRM_RESUME
 import org.videolan.tools.PLAYLIST_MODE_AUDIO
 import org.videolan.tools.PLAYLIST_MODE_VIDEO
@@ -69,9 +70,16 @@ object VersionMigration {
     private const val FORCE_PLAY_ALL_VIDEO = "force_play_all_video"
     private const val FORCE_PLAY_ALL_AUDIO = "force_play_all_audio"
 
-    suspend fun migrateVersion(context: Context) {
-        val settings = Settings.getInstance(context)
-        val lastVersion = settings.getInt(KEY_CURRENT_SETTINGS_VERSION, 0)
+    /**
+     * Migrate version
+     *
+     * @param context the context to be used to retrieve the preferences
+     * @param restoringPrefs the forced preferences to be used
+     * @param forcedVersion the forced version to be used
+     */
+    suspend fun migrateVersion(context: Context, restoringPrefs: SharedPreferences? = null, forcedVersion:Int? = null) {
+        val settings = restoringPrefs ?: Settings.getInstance(context)
+        val lastVersion = forcedVersion ?: settings.getInt(KEY_CURRENT_SETTINGS_VERSION, 0)
         val lastMajorVersion = settings.getInt(KEY_CURRENT_MAJOR_VERSION, 3)
         if (lastVersion < 1) {
             migrateToVersion1(settings)
@@ -159,6 +167,8 @@ object VersionMigration {
             remove("enable_black_theme")
         }
     }
+
+    fun getCurrentVersion() = CURRENT_VERSION
 
     /**
      * Deletes all the video thumbnails as we change the way to name them.
@@ -292,7 +302,7 @@ object VersionMigration {
                     try {
                         val oldColor = oldSetting.toInt()
                         val newColor = Color.argb(255, Color.red(oldColor), Color.green(oldColor), Color.blue(oldColor))
-                        putInt("subtitles_color", newColor)
+                        putInt(KEY_SUBTITLES_COLOR, newColor)
                     } catch (e: Exception) {
                         remove("subtitles_color")
                     }

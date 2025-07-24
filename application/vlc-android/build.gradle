@@ -40,10 +40,6 @@ android {
         // that the app's state is completely cleared between tests.
         testInstrumentationRunnerArguments clearPackageData: 'true'
 
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
-        compileSdk = rootProject.ext.compileSdkVersion
-        buildToolsVersion rootProject.ext.buildToolsVersion
         vectorDrawables.useSupportLibrary = true
     }
 

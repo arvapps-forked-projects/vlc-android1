@@ -34,13 +34,6 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
-    defaultConfig {
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
-        compileSdk = rootProject.ext.compileSdkVersion
-        buildToolsVersion rootProject.ext.buildToolsVersion
-    }
-
     sourceSets {
         main {
             jniLibs.srcDir 'jni/libs' // Where generated .so files are placed.

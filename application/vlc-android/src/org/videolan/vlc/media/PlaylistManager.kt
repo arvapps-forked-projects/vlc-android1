@@ -33,15 +33,6 @@ import org.videolan.medialibrary.interfaces.media.MediaWrapper
 import org.videolan.resources.AndroidDevices
 import org.videolan.resources.AppContextProvider
 import org.videolan.resources.EXIT_PLAYER
-import org.videolan.resources.KEY_AUDIO_LAST_PLAYLIST
-import org.videolan.resources.KEY_CURRENT_AUDIO
-import org.videolan.resources.KEY_CURRENT_AUDIO_RESUME_ARTIST
-import org.videolan.resources.KEY_CURRENT_AUDIO_RESUME_THUMB
-import org.videolan.resources.KEY_CURRENT_AUDIO_RESUME_TITLE
-import org.videolan.resources.KEY_CURRENT_MEDIA
-import org.videolan.resources.KEY_CURRENT_MEDIA_RESUME
-import org.videolan.resources.KEY_MEDIA_LAST_PLAYLIST
-import org.videolan.resources.KEY_MEDIA_LAST_PLAYLIST_RESUME
 import org.videolan.resources.PLAYLIST_TYPE_AUDIO
 import org.videolan.resources.PLAYLIST_TYPE_VIDEO
 import org.videolan.resources.PLAY_FROM_SERVICE
@@ -55,15 +46,26 @@ import org.videolan.tools.AUDIO_STOP_AFTER
 import org.videolan.tools.AppScope
 import org.videolan.tools.DAV1D_THREAD_NUMBER
 import org.videolan.tools.HTTP_USER_AGENT
+import org.videolan.tools.KEY_ALWAYS_FAST_SEEK
 import org.videolan.tools.KEY_AUDIO_CONFIRM_RESUME
 import org.videolan.tools.KEY_AUDIO_FORCE_SHUFFLE
+import org.videolan.tools.KEY_AUDIO_LAST_PLAYLIST
+import org.videolan.tools.KEY_CURRENT_AUDIO
+import org.videolan.tools.KEY_CURRENT_AUDIO_RESUME_ARTIST
+import org.videolan.tools.KEY_CURRENT_AUDIO_RESUME_THUMB
+import org.videolan.tools.KEY_CURRENT_AUDIO_RESUME_TITLE
+import org.videolan.tools.KEY_CURRENT_MEDIA
+import org.videolan.tools.KEY_CURRENT_MEDIA_RESUME
 import org.videolan.tools.KEY_INCOGNITO
 import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
 import org.videolan.tools.KEY_INCOGNITO_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.KEY_MEDIA_LAST_PLAYLIST
+import org.videolan.tools.KEY_MEDIA_LAST_PLAYLIST_RESUME
 import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
 import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL_VALUE
 import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL
 import org.videolan.tools.KEY_PLAYBACK_SPEED_VIDEO_GLOBAL_VALUE
+import org.videolan.tools.KEY_SAVE_INDIVIDUAL_AUDIO_DELAY
 import org.videolan.tools.KEY_VIDEO_APP_SWITCH
 import org.videolan.tools.KEY_VIDEO_CONFIRM_RESUME
 import org.videolan.tools.MEDIA_SHUFFLING
@@ -710,7 +712,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     fun setAudioDelay(delay: Long) {
         if (!player.setAudioDelay(delay)) return
         val media = getCurrentMedia() ?: return
-        if (media.id != 0L && settings.getBoolean("save_individual_audio_delay", true)) {
+        if (media.id != 0L && settings.getBoolean(KEY_SAVE_INDIVIDUAL_AUDIO_DELAY, true)) {
             launch(Dispatchers.IO) { media.setLongMeta(MediaWrapper.META_AUDIODELAY, player.getAudioDelay()) }
         }
     }
@@ -727,7 +729,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
             val globalDelay = Settings.getInstance(AppContextProvider.appContext).getLong(AUDIO_DELAY_GLOBAL, 0L)
             if (savedDelay == 0L && globalDelay != 0L) {
                 player.setAudioDelay(globalDelay)
-            } else if (settings.getBoolean("save_individual_audio_delay", true)) {
+            } else if (settings.getBoolean(KEY_SAVE_INDIVIDUAL_AUDIO_DELAY, true)) {
                 player.setAudioDelay(savedDelay)
             }
             val abStart = if (settings.getBoolean(PLAYBACK_HISTORY, true))  media.getMetaLong(MediaWrapper.META_AB_REPEAT_START) else 0L
@@ -1228,7 +1230,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 }
                 MediaPlayer.Event.TimeChanged -> {
                     abRepeat.value?.let {
-                        val fastSeek = settings.getBoolean("always_fast_seek", false)
+                        val fastSeek = settings.getBoolean(KEY_ALWAYS_FAST_SEEK, false)
                         if (it.stop != -1L && player.getCurrentTime() > it.stop) service.setTime(it.start, false)
                         if ((fastSeek && player.getCurrentTime() < it.start - 30000L)
                             || (!fastSeek && player.getCurrentTime() < it.start))
