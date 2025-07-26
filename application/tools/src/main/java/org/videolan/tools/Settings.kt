@@ -118,6 +118,7 @@ object Settings : SingletonHolder<SharedPreferences, Context>({ init(it.applicat
 }
 
 const val KEY_CURRENT_SETTINGS_VERSION = "current_settings_version"
+const val KEY_CURRENT_SETTINGS_VERSION_AFTER_LIBVLC_INSTANTIATION = "current_settings_libvlc_version"
 const val KEY_CURRENT_MAJOR_VERSION = "key_current_major_version"
 
 // Keys
@@ -199,6 +200,10 @@ const val KEYSTORE_PASSWORD_IV = "keystore_encrypted_password_iv"
 const val ENCRYPTED_KEY_NAME = "encryption_key"
 const val KEY_COOKIE_ENCRYPT_KEY = "cookie_encrypt_key"
 const val KEY_COOKIE_SIGN_KEY = "cookie_sign_key"
+
+//Equalizer
+const val KEY_CURRENT_EQUALIZER_ID = "current_equalizer_id"
+const val KEY_EQUALIZER_ENABLED = "equalizer_enabled"
 
 
 //Tips
