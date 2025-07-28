@@ -36,7 +36,6 @@ import androidx.preference.TwoStatePreference
 import org.videolan.medialibrary.Tools
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.AndroidDevices
-import org.videolan.resources.AppContextProvider
 import org.videolan.tools.KEY_APP_THEME
 import org.videolan.tools.KEY_ARTISTS_SHOW_ALL
 import org.videolan.tools.KEY_BLACK_THEME
@@ -108,6 +107,13 @@ class PreferencesUi : BasePreferenceFragment(), SharedPreferences.OnSharedPrefer
             }
             prefs.putSingle(KEY_APP_THEME, theme.toString())
         }
+
+        if (!AndroidDevices.canUseSystemNightMode()) {
+            val pref = findPreference<ListPreference>(KEY_APP_THEME)
+            pref?.entries = resources.getStringArray(R.array.daynight_mode_legacy_entries)
+            pref?.entryValues = resources.getStringArray(R.array.daynight_mode_legacy_values)
+
+        }
     }
 
     override fun onStart() {
@@ -158,7 +164,7 @@ class PreferencesUi : BasePreferenceFragment(), SharedPreferences.OnSharedPrefer
                 UiTools.restartDialog(requireActivity())
             }
             KEY_APP_THEME -> {
-                if (!AppContextProvider.locale.isNullOrEmpty()) UiTools.restartDialog(requireActivity()) else (activity as PreferencesActivity).exitAndRescan()
+                UiTools.restartDialog(requireActivity())
             }
             LIST_TITLE_ELLIPSIZE -> {
                 Settings.listTitleEllipsize = sharedPreferences.getString(LIST_TITLE_ELLIPSIZE, "0")?.toInt() ?: 0
