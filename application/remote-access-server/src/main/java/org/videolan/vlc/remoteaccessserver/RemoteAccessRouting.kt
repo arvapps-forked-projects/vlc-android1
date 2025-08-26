@@ -157,7 +157,7 @@ import java.util.Locale
  */
 fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
     val settings = Settings.getInstance(appContext)
-    staticFiles("", File(RemoteAccessServer.getServerFiles(appContext)))
+    staticFiles("", File(getServerFiles(appContext)))
     //the client is requesting a new code.
     // if the formparameters "challenge" is sent. Remove the corresponding code
     post("/code") {
@@ -337,7 +337,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
     get("/icon") {
         val idString = call.request.queryParameters["id"]
         val width = call.request.queryParameters["width"]?.toInt()?.coerceAtLeast(1) ?: 32
-        val preventTint = call.request.queryParameters["preventTint"]?.toBoolean() ?: false
+        val preventTint = call.request.queryParameters["preventTint"]?.toBoolean() == true
 
         val id = try {
             appContext.resIdByName(idString, "drawable")
@@ -356,7 +356,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
                 call.respondText(VectorDrawableUtil.convertToSvg(appContext, width, id, it), ContentType.Image.SVG)
                 return@get
             } catch (e: Resources.NotFoundException) {
-                Log.w(this::class.java.simpleName, "Failed to convert vector drawable. ${e.message}", )
+                Log.w(this::class.java.simpleName, "Failed to convert vector drawable. ${e.message}")
                 // Continue on and let BitmapUtil attempt to load the file
             }
         }
@@ -510,7 +510,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
             val remoteAccessServer = RemoteAccessServer.getInstance(appContext)
             val messages = listOfNotNull(
                 remoteAccessServer.generatePlayQueue(),
-                PlayerStatus(PlaylistManager.showAudioPlayer.value ?: false),
+                PlayerStatus(PlaylistManager.showAudioPlayer.value == true),
                 remoteAccessServer.generateNowPlaying()
             )
             call.respondJson(convertToJson(messages))
@@ -932,7 +932,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
                     else -> throw IllegalStateException("Unrecognised media type")
 
                 }
-                val title = if ((provider.url == null || Uri.parse(provider.url).scheme.isSchemeFile())
+                val title = if ((provider.url == null || provider.url!!.toUri().scheme.isSchemeFile())
                         && it is MediaWrapper) it.fileName else it.title
                 val isFolder = if (it is MediaWrapper) it.type == MediaWrapper.TYPE_DIR else true
                 var fileType = "folder"
@@ -950,10 +950,10 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
 
             //segments
             PathOperationDelegate.storages.put(AndroidDevices.EXTERNAL_PUBLIC_DIRECTORY,   RemoteAccessServer.getInstance(appContext).makePathSafe(appContext.getString(org.videolan.vlc.R.string.internal_memory)))
-            val breadcrumbItems = if (!isSchemeSupported(Uri.parse(decodedPath).scheme))
+            val breadcrumbItems = if (!isSchemeSupported(decodedPath.toUri().scheme))
                 listOf(RemoteAccessServer.BreadcrumbItem(appContext.getString(R.string.home), "root"))
             else
-                RemoteAccessServer.getInstance(appContext).prepareSegments(Uri.parse(decodedPath)).map {
+                RemoteAccessServer.getInstance(appContext).prepareSegments(decodedPath.toUri()).map {
                     RemoteAccessServer.BreadcrumbItem(it.first, it.second)
                 }.toMutableList().apply {
                     add(0, RemoteAccessServer.BreadcrumbItem(appContext.getString(R.string.home), "root"))
@@ -986,7 +986,7 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
                         if (id.toLong() > 0)
                             arrayOf(getMedia(id.toLong()))
                         else
-                            arrayOf(MLServiceLocator.getAbstractMediaWrapper(Uri.parse(path)))
+                            arrayOf(MLServiceLocator.getAbstractMediaWrapper(path.toUri()))
                     } else when (type) {
                         "album" -> getAlbum(id.toLong()).tracks
                         "artist" -> getArtist(id.toLong()).tracks
@@ -1228,44 +1228,44 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
                 when (type) {
                     "album" -> {
                         val album = appContext.getFromMl { getAlbum(id.toLong()) }
-                        album.setFavorite(favorite)
+                        album.isFavorite = favorite
                         call.respondText("")
                         return@get
                     }
                     "artist" -> {
                         val artist = appContext.getFromMl { getArtist(id.toLong()) }
-                        artist.setFavorite(favorite)
+                        artist.isFavorite = favorite
                         call.respondText("")
                         return@get
                     }
                     "genre" -> {
                         val genre = appContext.getFromMl { getGenre(id.toLong()) }
-                        genre.setFavorite(favorite)
+                        genre.isFavorite = favorite
                         call.respondText("")
                         return@get
                     }
                     "playlist" -> {
                         val playlist = appContext.getFromMl { getPlaylist(id.toLong(), false, false) }
-                        playlist.setFavorite(favorite)
+                        playlist.isFavorite = favorite
                         call.respondText("")
                         return@get
                     }
                     "video-group" -> {
                         val videoGroup = appContext.getFromMl { getVideoGroup(id.toLong()) }
-                        videoGroup.setFavorite(favorite)
+                        videoGroup.isFavorite = favorite
                         call.respondText("")
                         return@get
                     }
                     "video-folder" -> {
                         val videoFolder = appContext.getFromMl { getFolder(Folder.TYPE_FOLDER_VIDEO, id.toLong()) }
-                        videoFolder.setFavorite(favorite)
+                        videoFolder.isFavorite = favorite
                         call.respondText("")
                         return@get
                     }
                     else -> {
                         //simple media. It's a direct download
                         appContext.getFromMl { getMedia(id.toLong()) }?.let { media ->
-                            media.setFavorite(favorite)
+                            media.isFavorite = favorite
                             call.respondText("")
                             return@get
 
@@ -1548,7 +1548,7 @@ private suspend fun getProviderContent(context:Context, provider: BrowserProvide
 
         }
         val title = if (provider is FileBrowserProvider
-                && (provider.url == null || Uri.parse(provider.url).scheme.isSchemeFile())
+                && (provider.url == null || provider.url!!.toUri().scheme.isSchemeFile())
                 && mediaLibraryItem is MediaWrapper) mediaLibraryItem.fileName else mediaLibraryItem.title
         val isFolder = if (mediaLibraryItem is MediaWrapper) mediaLibraryItem.type == MediaWrapper.TYPE_DIR else true
         list.add(RemoteAccessServer.PlayQueueItem(idPrefix + index, title, description, 0, mediaLibraryItem.artworkMrl

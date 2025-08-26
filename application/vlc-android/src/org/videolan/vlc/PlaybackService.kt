@@ -25,7 +25,6 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.SearchManager
-import android.app.Service
 import android.app.UiModeManager
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
@@ -871,7 +870,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        forceForeground(intent?.extras?.getBoolean("foreground", false) ?: false)
+        forceForeground(intent?.extras?.getBoolean("foreground", false) == true)
         dispatcher.onServicePreSuperOnStart()
         setupScope()
         when (intent?.action) {
@@ -909,7 +908,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 }
             }
         }
-        return Service.START_NOT_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onTaskRemoved(rootIntent: Intent) {
@@ -2079,9 +2078,9 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
 
     fun isCarMode(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            carConnection.type.value?.let { it > CarConnection.CONNECTION_TYPE_NOT_CONNECTED } ?: false
+            carConnection.type.value?.let { it > CarConnection.CONNECTION_TYPE_NOT_CONNECTED } == true
         } else {
-            (getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_CAR
+            (getSystemService(UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_CAR
         }
     }
 }

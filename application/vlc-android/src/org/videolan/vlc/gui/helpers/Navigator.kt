@@ -67,7 +67,6 @@ class Navigator : NavigationBarView.OnItemSelectedListener, DefaultLifecycleObse
     private val defaultFragmentId = R.id.nav_video
     override var currentFragmentId: Int = 0
     private var currentFragment: Fragment? = null
-        private set
     private lateinit var activity: MainActivity
     private lateinit var settings: SharedPreferences
     override lateinit var navigationView: List<NavigationBarView>
@@ -130,11 +129,6 @@ class Navigator : NavigationBarView.OnItemSelectedListener, DefaultLifecycleObse
     override fun currentIdIsExtension() = idIsExtension(currentFragmentId)
 
     private fun idIsExtension(id: Int) = id in 1..100
-
-    private fun clearBackstackFromClass(clazz: Class<*>) {
-        val fm = activity.supportFragmentManager
-        while (clazz.isInstance(currentFragment)) if (!fm.popBackStackImmediate()) break
-    }
 
     override fun reloadPreferences() {
         currentFragmentId = settings.getInt(KEY_FRAGMENT_ID, defaultFragmentId)

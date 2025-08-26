@@ -248,7 +248,6 @@ import kotlin.math.roundToInt
 
 open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, PlaylistAdapter.IPlayer, OnClickListener, OnLongClickListener, StoragePermissionsDelegate.CustomActionController, TextWatcher, IDialogManager, KeycodeListener {
 
-    private var warnMetered = false
     var hasPhysicalNotch: Boolean = false
     private var subtitlesExtraPath: String? = null
     private lateinit var startedScope: CoroutineScope
@@ -744,18 +743,6 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         }
     }
 
-    private fun hideSearchField(): Boolean {
-        if (overlayDelegate.playlistSearchText.visibility != View.VISIBLE) return false
-        overlayDelegate.playlistSearchText.editText?.apply {
-            removeTextChangedListener(this@VideoPlayerActivity)
-            setText("")
-            addTextChangedListener(this@VideoPlayerActivity)
-        }
-        UiTools.setKeyboardVisibility(overlayDelegate.playlistSearchText, false)
-
-        return true
-    }
-
     override fun onResume() {
         overridePendingTransition(0, 0)
         super.onResume()
@@ -987,8 +974,8 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
 
         unregisterReceiver(btReceiver)
         alertDialog?.dismiss()
-        val isPlayingPopup = service?.isPlayingPopup ?: false
-        val isSystemPip = (service?.isInPiPMode?.value ?: false) && !isPlayingPopup
+        val isPlayingPopup = service?.isPlayingPopup == true
+        val isSystemPip = (service?.isInPiPMode?.value == true) && !isPlayingPopup
         if (displayManager.isPrimary && !isFinishing && service?.isPlaying == true
                 && "1" == settings.getString(KEY_VIDEO_APP_SWITCH, "0") && !PlaybackService.hasRenderer()
                 && (!isSystemPip || !isInteractive)) {
@@ -1063,7 +1050,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             val mediaPlayer = mediaplayer
             if (!displayManager.isOnRenderer) videoLayout?.let {
                 mediaPlayer.attachViews(it, displayManager, true, false)
-                val size = if (isBenchmark) MediaPlayer.ScaleType.SURFACE_FILL else MediaPlayer.ScaleType.values()[settings.getInt(VIDEO_RATIO, MediaPlayer.ScaleType.SURFACE_BEST_FIT.ordinal)]
+                val size = if (isBenchmark) MediaPlayer.ScaleType.SURFACE_FILL else MediaPlayer.ScaleType.entries[settings.getInt(VIDEO_RATIO, MediaPlayer.ScaleType.SURFACE_BEST_FIT.ordinal)]
                 mediaPlayer.videoScale = size
             }
 
@@ -1231,7 +1218,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     private fun exitOK() {
-        exit(Activity.RESULT_OK)
+        exit(RESULT_OK)
     }
 
     override fun onTrackballEvent(event: MotionEvent): Boolean {
@@ -1774,17 +1761,6 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         overlayDelegate.updatePlaybackSpeedChip()
     }
 
-    private fun encounteredError() {
-        if (isFinishing || service?.hasNext() == true) return
-        /* Encountered Error, exit player with a message */
-        alertDialog = AlertDialog.Builder(this@VideoPlayerActivity)
-            .setOnCancelListener { exit(RESULT_PLAYBACK_ERROR) }
-            .setPositiveButton(R.string.ok) { _, _ -> exit(RESULT_PLAYBACK_ERROR) }
-            .setTitle(R.string.encountered_error_title)
-            .setMessage(R.string.encountered_error_message)
-            .create().apply { show() }
-    }
-
     private fun handleVout(voutCount: Int) {
         handler.removeCallbacks(switchAudioRunnable)
 
@@ -1814,7 +1790,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     override fun isInPictureInPictureMode(): Boolean {
-        return service?.isInPiPMode?.value ?: false
+        return service?.isInPiPMode?.value == true
     }
 
     override fun setPictureInPictureParams(params: PictureInPictureParams) {
@@ -1844,7 +1820,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     internal fun updateViewpoint(yaw: Float, pitch: Float, fov: Float): Boolean {
-        return service?.updateViewpoint(yaw, pitch, 0f, fov, false) ?: false
+        return service?.updateViewpoint(yaw, pitch, 0f, fov, false) == true
     }
 
     internal fun initAudioVolume() = service?.let { service ->
@@ -2103,10 +2079,6 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
 
     override fun onStorageAccessGranted() {
         handler.sendEmptyMessage(START_PLAYBACK)
-    }
-
-    fun hideOptions() {
-        optionsDelegate?.hide()
     }
 
     private fun showNavMenu() {
@@ -2532,11 +2504,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 }
                 val interactive = service?.mediaplayer?.let {
                     try {
-                        (it.titles[it.title])?.isInteractive ?: false
+                        (it.titles[it.title])?.isInteractive == true
                     } catch (e: NullPointerException) {
                         false
                     }
-                } ?: false
+                } == true
                 isNavMenu = menuIdx == currentIdx || interactive
             }
 
@@ -2605,9 +2577,9 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         private const val EXTRA_DURATION = "extra_duration"
         private const val EXTRA_URI = "extra_uri"
         const val FROM_EXTERNAL = "from_external"
-        private const val RESULT_CONNECTION_FAILED = Activity.RESULT_FIRST_USER + 1
-        private const val RESULT_PLAYBACK_ERROR = Activity.RESULT_FIRST_USER + 2
-        private const val RESULT_VIDEO_TRACK_LOST = Activity.RESULT_FIRST_USER + 3
+        private const val RESULT_CONNECTION_FAILED = RESULT_FIRST_USER + 1
+        private const val RESULT_PLAYBACK_ERROR = RESULT_FIRST_USER + 2
+        private const val RESULT_VIDEO_TRACK_LOST = RESULT_FIRST_USER + 3
         internal const val DEFAULT_FOV = 80f
         private const val KEY_TIME = "saved_time"
         private const val KEY_LIST = "saved_list"
