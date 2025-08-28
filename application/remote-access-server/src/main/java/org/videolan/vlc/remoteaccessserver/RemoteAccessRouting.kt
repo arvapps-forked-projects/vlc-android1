@@ -944,8 +944,18 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
                         else -> "file"
                     }
                 }
-                RemoteAccessServer.PlayQueueItem(1000L + index, title, it.description ?: "", 0, it.artworkMrl
-                        ?: "", false, "", filePath, isFolder, fileType = fileType)
+                val id = if (it is MediaWrapper && it.id > 0) it.id else 1000L + index
+                val played = if (it is MediaWrapper) it.seen >  0 else false
+
+                if (it is MediaWrapper && it.id > 0) {
+                    it.toPlayQueueItem().apply {
+                        this.fileType = fileType
+                        this.artist = it.description
+                    }
+                } else
+                    RemoteAccessServer.PlayQueueItem(
+                        id, title, it.description ?: "", 0, it.artworkMrl
+                            ?: "", false, "", filePath, isFolder, fileType = fileType, played = played)
             }
 
             //segments
@@ -983,8 +993,9 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
 
                 val medias = appContext.getFromMl {
                     if (path?.isNotBlank() == true) {
-                        if (id.toLong() > 0)
-                            arrayOf(getMedia(id.toLong()))
+                        val media = getMedia(path.toUri())
+                        if (media != null)
+                            arrayOf(media)
                         else
                             arrayOf(MLServiceLocator.getAbstractMediaWrapper(path.toUri()))
                     } else when (type) {
@@ -1347,6 +1358,24 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
                     return@get
                 }
             }
+            if (type == "file_big") {
+                BitmapUtil.encodeImage(BitmapUtil.vectorToBitmap(appContext, R.drawable.ic_unknown_big, 256, 256), true)?.let {
+                    call.respondBytes(ContentType.Image.PNG) { it }
+                    return@get
+                }
+            }
+            if (type == "subtitle") {
+                BitmapUtil.encodeImage(BitmapUtil.vectorToBitmap(appContext, R.drawable.ic_subtitles, 256, 256), true)?.let {
+                    call.respondBytes(ContentType.Image.PNG) { it }
+                    return@get
+                }
+            }
+            if (type == "subtitle_big") {
+                BitmapUtil.encodeImage(BitmapUtil.vectorToBitmap(appContext, R.drawable.ic_subtitles, 512, 512), true)?.let {
+                    call.respondBytes(ContentType.Image.PNG) { it }
+                    return@get
+                }
+            }
             try {
                 val artworkMrl = call.request.queryParameters["artwork"] ?: RemoteAccessServer.getInstance(appContext).service?.coverArt
 
@@ -1615,7 +1644,7 @@ fun Playlist.toPlayQueueItem(appContext: Context) = RemoteAccessServer.PlayQueue
         ?: "", false, "", favorite = isFavorite)
 
 fun MediaWrapper.toPlayQueueItem(defaultArtist: String = "") = RemoteAccessServer.PlayQueueItem(id, title, artistName?.ifEmpty { defaultArtist } ?: defaultArtist, length, artworkMrl
-        ?: "", false, generateResolutionClass(width, height) ?: "", progress = time, played = seen > 0, favorite = isFavorite)
+        ?: "", false, generateResolutionClass(width, height) ?: "", progress = time, played = seen > 0, favorite = isFavorite, path = uri.toString())
 
 fun Folder.toPlayQueueItem(context: Context) = RemoteAccessServer.PlayQueueItem(id, title, context.resources.getQuantityString(org.videolan.vlc.R.plurals.videos_quantity, mediaCount(Folder.TYPE_FOLDER_VIDEO), mediaCount(Folder.TYPE_FOLDER_VIDEO))
         ?: "", 0, artworkMrl
