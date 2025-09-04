@@ -60,7 +60,6 @@ import androidx.annotation.MainThread
 import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import androidx.car.app.connection.CarConnection
-import androidx.car.app.notification.CarPendingIntent
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.edit
@@ -110,10 +109,8 @@ import org.videolan.resources.ACTION_REMOTE_SEEK_BACKWARD
 import org.videolan.resources.ACTION_REMOTE_SEEK_FORWARD
 import org.videolan.resources.ACTION_REMOTE_STOP
 import org.videolan.resources.ACTION_REMOTE_SWITCH_VIDEO
-import org.videolan.resources.ANDROID_AUTO_APP_PKG
 import org.videolan.resources.AndroidDevices
 import org.videolan.resources.AppContextProvider
-import org.videolan.resources.CAR_SETTINGS
 import org.videolan.resources.CUSTOM_ACTION
 import org.videolan.resources.CUSTOM_ACTION_BOOKMARK
 import org.videolan.resources.CUSTOM_ACTION_FAST_FORWARD
@@ -153,17 +150,18 @@ import org.videolan.tools.KEY_AUDIO_TASK_REMOVED
 import org.videolan.tools.KEY_ENABLE_HEADSET_DETECTION
 import org.videolan.tools.KEY_ENABLE_PLAY_ON_HEADSET_INSERTION
 import org.videolan.tools.KEY_METERED_CONNECTION
+import org.videolan.tools.KEY_PLAYBACK_SPEED_AUDIO_GLOBAL
 import org.videolan.tools.KEY_VIDEO_APP_SWITCH
 import org.videolan.tools.LOCKSCREEN_COVER
 import org.videolan.tools.POSITION_IN_AUDIO_LIST
 import org.videolan.tools.POSITION_IN_SONG
 import org.videolan.tools.SHOW_SEEK_IN_COMPACT_NOTIFICATION
 import org.videolan.tools.Settings
+import org.videolan.tools.formatRateString
 import org.videolan.tools.getContextWithLocale
 import org.videolan.tools.getResourceUri
 import org.videolan.tools.markBidi
 import org.videolan.tools.readableSize
-import org.videolan.vlc.car.VLCCarService
 import org.videolan.vlc.gui.AudioPlayerContainerActivity
 import org.videolan.vlc.gui.dialogs.VideoTracksDialog
 import org.videolan.vlc.gui.dialogs.adapters.VlcTrack
@@ -273,11 +271,6 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
      */
     lateinit var mediaBrowserCompat:MediaBrowserCompat
 
-    /**
-     * Once a media has shown the speed action once,
-     * continue showing it until the media changes even if the other conditions are not met
-     */
-    private var forceAutoShowSpeed:Pair<String?, Boolean> = Pair(null, false)
 
 
     private val receiver = object : BroadcastReceiver() {
@@ -1187,6 +1180,13 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 putLong(MediaMetadataCompat.METADATA_KEY_DURATION, if (length != 0L) length else -1L)
             }
             if (carMode) {
+                val speedStr = buildString {
+                    append(speed.formatRateString())
+                    if (settings.getBoolean(KEY_PLAYBACK_SPEED_AUDIO_GLOBAL, false))
+                        append(" (${getString(R.string.playback_speed_all_tracks)})")
+                    else
+                        append(" (${getString(R.string.playback_speed_this_track)})")
+                }
                 var carTitle = title
                 var carSubtitle = MediaUtils.getDisplaySubtitle(ctx, media)
                 val shortQueue = settings.getInt(KEY_ANDROID_AUTO_QUEUE_FORMAT_VAL, 1) == 0
@@ -1198,6 +1198,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                     2 -> carTitle = TextUtils.separatedString(carTitle.markBidi(), queueInfo)
                     3 -> carSubtitle = TextUtils.separatedString(queueInfo, carSubtitle)
                 }
+                if (speed != 1F) carSubtitle = TextUtils.separatedString(speedStr, carSubtitle)
                 /**
                  * This section allows for variability in the title and subtitle contents.
                  */
@@ -1362,10 +1363,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     }
 
     private fun addCustomSpeedActions(pscb: PlaybackStateCompat.Builder, showSpeedActions: Boolean = true) {
-        if (speed != 1.0F || showSpeedActions || ( currentMediaWrapper?.uri != null && forceAutoShowSpeed.first == currentMediaWrapper?.uri?.toString() && forceAutoShowSpeed.second)) {
-            currentMediaWrapper?.uri?.let {
-                forceAutoShowSpeed = Pair(it.toString(), true)
-            }
+        if (showSpeedActions) {
             val speedIcons = hashMapOf(
                     0.50f to R.drawable.ic_auto_speed_0_50,
                     0.80f to R.drawable.ic_auto_speed_0_80,
@@ -1378,7 +1376,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
             val speedResId = speedIcons[speedIcons.keys.minByOrNull { (speed - it).absoluteValue }]
                     ?: R.drawable.ic_auto_speed
             pscb.addCustomAction(CUSTOM_ACTION_SPEED, getString(R.string.playback_speed), speedResId)
-        } else forceAutoShowSpeed = Pair(null, false)
+        }
     }
 
     fun notifyTrackChanged() {
@@ -1781,7 +1779,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     fun setRate(rate: Float, save: Boolean) {
         playlistManager.player.setRate(rate, save)
         lifecycleScope.launch(Dispatchers.Main) {
-            publishState()
+            executeUpdate(true)
         }
     }
 
@@ -1932,13 +1930,6 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                 val extras = MediaSessionBrowser.getContentStyle().apply {
                     putBoolean(BrowserRoot.EXTRA_SUGGESTED, true)
                     putBoolean(MediaConstants.BROWSER_SERVICE_EXTRAS_KEY_SEARCH_SUPPORTED, true)
-                }
-                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O && clientPackageName == ANDROID_AUTO_APP_PKG) {
-                    val intent = Intent(CAR_SETTINGS).apply {
-                        component = ComponentName(ctx, VLCCarService::class.java)
-                    }
-                    val pendingIntent = CarPendingIntent.getCarApp(ctx, 0, intent, PendingIntent.FLAG_MUTABLE)
-                    extras.putParcelable(MediaConstants.BROWSER_SERVICE_EXTRAS_KEY_APPLICATION_PREFERENCES_USING_CAR_APP_LIBRARY_INTENT, pendingIntent)
                 }
                 BrowserRoot(rootId, extras)
             }
