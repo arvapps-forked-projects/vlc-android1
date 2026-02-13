@@ -154,7 +154,7 @@ elif [ "$ANDROID_ABI" = "x86_64" ]; then
     ARCH="x86_64"
     TRIPLET="x86_64-linux-android"
 else
-    diagnostic "Invalid arch specified: '$ANDROID_ABI'."
+    diagnostic "Invalid arch specified: '$ANDROID_ABI' (arm64-v8a|armeabi-v7a|x86_64|x86)."
     diagnostic "Try --help for more information"
     exit 1
 fi
@@ -203,6 +203,12 @@ init_local_props() {
     echo_props() {
         echo "sdk.dir=$ANDROID_SDK"
         echo "android.ndkPath=$ANDROID_NDK"
+        NDK_FULL_VERSION=$(grep -o '^Pkg.Revision.*[0-9]*.*' $ANDROID_NDK/source.properties |cut -d " " -f 3)
+        echo "android.ndkFullVersion=$NDK_FULL_VERSION"
+        if [ $(command -v cmake) >/dev/null 2>&1 ]; then
+            # prefix of the cmake installation, not the cmake path or the dir that contains the cmake executable
+            echo "cmake.dir=$(dirname $(dirname $(command -v cmake)))"
+        fi
     }
     # first check if the file just needs to be created for the first time
     if [ ! -f "$1" ]; then
@@ -241,7 +247,9 @@ init_local_props() {
         while IFS= read -r LINE || [ -n "$LINE" ]; do
             line_sdk_dir="${LINE#sdk.dir=}"
             line_ndk_dir="${LINE#android.ndkPath=}"
-            if [ "x$line_sdk_dir" = "x$LINE" ] && [ "x$line_ndk_dir" = "x$LINE" ]; then
+            line_ndk_version="${LINE#android.ndkFullVersion=}"
+            line_cmake_dir="${LINE#cmake.dir=}"
+            if [ "x$line_sdk_dir" = "x$LINE" ] && [ "x$line_ndk_dir" = "x$LINE" ] && [ "x$line_ndk_version" = "x$LINE" ] && [ "x$line_cmake_dir" = "x$LINE" ]; then
                 echo "$LINE"
             fi
         done <"$1" >"$temp_props"
