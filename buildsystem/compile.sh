@@ -274,37 +274,8 @@ if [ "$FORCE_VLC_4" = 1 ]; then
     gradle_prop="-PforceVlc4=true"
 fi
 
-##########
-# GRADLE #
-##########
-
-if [ ! -e "./gradlew" ] || [ ! -x "./gradlew" ]; then
-    diagnostic "gradlew not found"
-    # the SHA256 is found in https://gradle.org/release-checksums/
-    GRADLE_VERSION=8.13
-    GRADLE_SHA256=20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78
-    GRADLE_URL=https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
-    GRADLE_DOWNLOADED_ZIP=gradle-${GRADLE_VERSION}-bin.zip
-
-    export PATH="$(pwd -P)/gradle-${GRADLE_VERSION}/bin:$PATH"
-    GRADLE_PATH_VERSION=$(cd buildsystem/gradle_version; gradle -q 2>/dev/null | grep gradle_version= | cut -b 16-)
-    if [ "$GRADLE_PATH_VERSION" != "$GRADLE_VERSION" ]; then
-        diagnostic "gradle could not be found in PATH, downloading"
-        wget ${GRADLE_URL} -O ${GRADLE_DOWNLOADED_ZIP}  2>/dev/null || curl -LO ${GRADLE_URL} || fail "gradle: download failed"
-        echo $GRADLE_SHA256 ${GRADLE_DOWNLOADED_ZIP} | sha256sum -c || fail "gradle: hash mismatch"
-
-        unzip -o ${GRADLE_DOWNLOADED_ZIP} || fail "gradle: unzip failed"
-        rm -rf ${GRADLE_DOWNLOADED_ZIP}
-    fi
-
-    gradle wrapper ${gradle_prop} || fail "gradle: wrapper failed"
-
-    chmod a+x gradlew
-fi
-./gradlew -version || fail "gradle: wrapper failed"
-
 ####################
-# Fetch VLC source #
+# Fetch libVLCjni source #
 ####################
 
 
@@ -334,6 +305,46 @@ if [ ! -d "$VLC_LIBJNI_PATH" ] || [ ! -d "$VLC_LIBJNI_PATH/.git" ]; then
     init_local_props local.properties || { echo "Error initializing local.properties"; exit $?; }
     cd ..
 fi
+
+##########
+# GRADLE #
+##########
+
+GRADLE_VERSION=9.2.1
+# the SHA256 is found in https://gradle.org/release-checksums/
+GRADLE_SHA256=72f44c9f8ebcb1af43838f45ee5c4aa9c5444898b3468ab3f4af7b6076c5bc3f
+GRADLE_URL=https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
+GRADLE_DOWNLOADED_ZIP=gradle-${GRADLE_VERSION}-bin.zip
+
+if [ -e "./gradlew" ] && [ -x "./gradlew" ]; then
+    GRADLE_CACHED_VERSION=$(./gradlew -q 2>/dev/null | grep gradle_version= | cut -b 16-)
+    if [ "$GRADLE_PATH_VERSION" != "$GRADLE_VERSION" ]; then
+        diagnostic "gradlew version $GRADLE_PATH_VERSION not matching $GRADLE_VERSION"
+        rm -rf "./gradlew"
+    fi
+fi
+if [ ! -e "./gradlew" ] || [ ! -x "./gradlew" ]; then
+    diagnostic "gradlew not found"
+    export PATH="$(pwd -P)/gradle-${GRADLE_VERSION}/bin:$PATH"
+    GRADLE_PATH_VERSION=$(cd buildsystem/gradle_version; gradle -q 2>/dev/null | grep gradle_version= | cut -b 16-)
+    if [ "$GRADLE_PATH_VERSION" != "$GRADLE_VERSION" ]; then
+        diagnostic "gradle could not be found in PATH, downloading"
+        wget ${GRADLE_URL} -O ${GRADLE_DOWNLOADED_ZIP}  2>/dev/null || curl -LO ${GRADLE_URL} || fail "gradle: download failed"
+        echo $GRADLE_SHA256 ${GRADLE_DOWNLOADED_ZIP} | sha256sum -c || fail "gradle: hash mismatch"
+
+        unzip -o ${GRADLE_DOWNLOADED_ZIP} || fail "gradle: unzip failed"
+        rm -rf ${GRADLE_DOWNLOADED_ZIP}
+    fi
+
+    gradle wrapper ${gradle_prop} || fail "gradle: wrapper failed"
+
+    chmod a+x gradlew
+fi
+./gradlew -version || fail "gradle: wrapper failed"
+
+####################
+# Fetch VLC source #
+####################
 
 # If you want to use an existing vlc dir add its path to an VLC_SRC_DIR env var
 if [ -z "$VLC_SRC_DIR" ]; then
