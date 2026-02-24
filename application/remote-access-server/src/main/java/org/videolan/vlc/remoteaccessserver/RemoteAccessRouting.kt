@@ -50,6 +50,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.auth.authenticate
 import io.ktor.server.http.content.staticFiles
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.header
@@ -64,6 +65,7 @@ import io.ktor.server.routing.post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -151,6 +153,8 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 
+private const val TAG = "VLC/HttpSharingServer"
+
 /**
  * Setup the server routing
  *
@@ -195,6 +199,11 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
                 RemoteAccessUtils.otpFlow.emit(null)
             }
             call.respondRedirect("/")
+            return@post
+        }
+        if (isFlooding(appContext, call.request.origin.remoteAddress)) {
+            Log.w(TAG, "Too many requests from ${call.request.origin.remoteAddress}")
+            call.respond(HttpStatusCode.TooManyRequests)
             return@post
         }
         call.respondRedirect("/index.html#/login/error")
@@ -1216,20 +1225,35 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
             }
             call.respond(HttpStatusCode.NotFound)
         }
-        //Download a file previously prepared
+        // Download a file previously prepared
         get("/download") {
-            call.request.queryParameters["file"]?.let {
-                val dst = File("${RemoteAccessServer.getInstance(appContext).downloadFolder}/$it")
-                call.response.header(
-                        HttpHeaders.ContentDisposition,
-                        ContentDisposition.Attachment.withParameter(ContentDisposition.Parameters.FileName, dst.toUri().lastPathSegment
-                                ?: "")
-                                .toString()
-                )
-                call.respondFile(dst)
-                dst.delete()
+            val requested = call.request.queryParameters["file"] ?: run {
+                call.respond(HttpStatusCode.BadRequest, "Missing file parameter")
+                return@get
             }
-            call.respond(HttpStatusCode.NotFound)
+
+            val baseDir = File(RemoteAccessServer.getInstance(appContext).downloadFolder).canonicalFile
+            val dstFile = File(baseDir, requested).canonicalFile
+
+            // Enforce that the resolved path stays within the intended download directory
+            if (!dstFile.path.startsWith(baseDir.path + File.separator)) {
+                call.respond(HttpStatusCode.BadRequest, "Invalid file path")
+                return@get
+            }
+
+            // Send as attachment with a safe filename
+            call.response.header(
+                HttpHeaders.ContentDisposition,
+                ContentDisposition.Attachment
+                    .withParameter(ContentDisposition.Parameters.FileName, dstFile.name)
+                    .toString()
+            )
+
+            // Stream the file, then return early to avoid double responses
+            call.respondFile(dstFile)
+            // Optionally delete only if it resides in baseDir
+            runCatching { if (dstFile.exists()) dstFile.delete() }
+            return@get
         }
         //Change the favorite state of a media
         get("/favorite") {
@@ -1445,6 +1469,24 @@ fun Route.setupRouting(appContext: Context, scope: CoroutineScope) {
             call.respond(HttpStatusCode.NotFound, "")
         }
     }
+}
+
+val attempts:ArrayList<Pair<String, Long>> = arrayListOf()
+private suspend fun isFlooding(appContext: Context, ip:String): Boolean {
+    val now = System.currentTimeMillis()
+    attempts.add(Pair(ip, now))
+    attempts.removeIf { System.currentTimeMillis() - it.second > 3_600_000L }
+    val nbAttemptsBySec = attempts.filter { it.first == ip && it.second > now - 1_000L }.size
+    if (nbAttemptsBySec > 1) {
+        delay((nbAttemptsBySec - 1) * 500L)
+    }
+    val nbAttemptsByMin = attempts.filter { it.first == ip && it.second > now - 60_000L }.size
+    if (nbAttemptsByMin > 10) {
+        RemoteAccessOTP.removeAllCodes(appContext)
+        delay((nbAttemptsByMin - 10) * 2_000L)
+    }
+    val nbAttempts = attempts.filter { it.first == ip }.size
+    return nbAttempts > 20
 }
 
 /**
