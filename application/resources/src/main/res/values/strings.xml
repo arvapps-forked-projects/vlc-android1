@@ -44,6 +44,8 @@
     <string name="playback_controls">Playback controls</string>
     <string name="medialibrary_scan">Media library scan</string>
     <string name="Medialibrary_progress">Media library scanning progress updates</string>
+    <string name="ml_database_warning">Your database contains the list of all of your media. It will be shared with VLC\'s developers</string>
+    <string name="logs_warning">May contain info about your played media. It will be shared with VLC\'s developers</string>
     <string name="play_from_start">Play from start</string>
     <string name="play_as_audio">Play as audio</string>
     <string name="play_as_video">Play as video</string>
@@ -448,6 +450,9 @@
     <string name="subtitles_prefs_category">Subtitles</string>
     <string name="subtitles_size_title">Subtitles Size</string>
     <string name="subtitles_presets_title">Subtitles presets</string>
+    <string name="subtitles_size_nano">Nano</string>
+    <string name="subtitles_size_micro">Micro</string>
+    <string name="subtitles_size_smallest">Smallest</string>
     <string name="subtitles_size_small">Small</string>
     <string name="subtitles_size_normal">Normal</string>
     <string name="subtitles_size_big">Big</string>
