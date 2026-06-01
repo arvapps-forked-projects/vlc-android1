@@ -226,7 +226,7 @@ init_local_props() {
     total_sdk_count=`grep -c "${sdk_line_start}" "$1"`
     good_sdk_count=`grep -c "${sdk_line_start}${android_sdk_regex}\$" "$1"`
     # check for lines setting the NDK directory
-    ndk_line_start="^ndk\.dir="
+    ndk_line_start="^android\.ndkPath="
     total_ndk_count=`grep -c "${ndk_line_start}" "$1"`
     good_ndk_count=`grep -c "${ndk_line_start}${android_ndk_regex}\$" "$1"`
     # if one of each is found and both match the environment vars, no action needed
@@ -280,10 +280,10 @@ fi
 
 
 if [ "$FORCE_VLC_4" = 1 ]; then
-    LIBVLCJNI_TESTED_HASH=039b4cb64641e56b2cd981b54efd866b00dfe3c7
+    LIBVLCJNI_TESTED_HASH=d3058ce947fa13e0ce5cf5e767e4ada7a85b1063
     LIBVLCJNI_BRANCH="master"
 else
-    LIBVLCJNI_TESTED_HASH=2fca0d2b5eb1d94e2c41e23408e8087358cb983a
+    LIBVLCJNI_TESTED_HASH=f6d8607210adba08f504e4b065f18620ba652de6
     LIBVLCJNI_BRANCH="libvlcjni-3.x"
 fi
 LIBVLCJNI_REPOSITORY=https://code.videolan.org/videolan/libvlcjni.git
