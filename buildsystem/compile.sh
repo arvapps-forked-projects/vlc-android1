@@ -280,10 +280,10 @@ fi
 
 
 if [ "$FORCE_VLC_4" = 1 ]; then
-    LIBVLCJNI_TESTED_HASH=d3058ce947fa13e0ce5cf5e767e4ada7a85b1063
+    LIBVLCJNI_TESTED_HASH=cbb488a392a98ef29c69b9c12856c4ccaeefaaed
     LIBVLCJNI_BRANCH="master"
 else
-    LIBVLCJNI_TESTED_HASH=f6d8607210adba08f504e4b065f18620ba652de6
+    LIBVLCJNI_TESTED_HASH=4c1387b4961a7c2114f263916a66d43c59130aec
     LIBVLCJNI_BRANCH="libvlcjni-3.x"
 fi
 LIBVLCJNI_REPOSITORY=https://code.videolan.org/videolan/libvlcjni.git
@@ -310,9 +310,9 @@ fi
 # GRADLE #
 ##########
 
-GRADLE_VERSION=9.2.1
+GRADLE_VERSION=9.3.1
 # the SHA256 is found in https://gradle.org/release-checksums/
-GRADLE_SHA256=72f44c9f8ebcb1af43838f45ee5c4aa9c5444898b3468ab3f4af7b6076c5bc3f
+GRADLE_SHA256=b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06
 GRADLE_URL=https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
 GRADLE_DOWNLOADED_ZIP=gradle-${GRADLE_VERSION}-bin.zip
 

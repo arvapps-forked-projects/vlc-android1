@@ -56,11 +56,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = '1.8'
+        sourceCompatibility "$rootProject.ext.targetJVM"
+        targetCompatibility "$rootProject.ext.targetJVM"
     }
 
     task webCopy(type: Copy) {
@@ -84,6 +81,10 @@ android {
                 output.outputFileName = "vlc-android-remote-access-${library_version}.aar"
             }
         }
+    }
+
+    buildFeatures {
+        resValues = true
     }
 }
 
